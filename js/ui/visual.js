@@ -38,16 +38,33 @@
     const now = this.actx.currentTime;
     const pos = this.sched.position(now); // 0..1 around the circle
     const ppc = (this.ens.pat && this.ens.pat.ppc) || 48;
-    const ticks = ppc / 3;                // one spoke per sixteenth
+    const step = (this.ens.pat && this.ens.pat.step) || 3;
+    const ticks = ppc / step;             // one spoke per subdivision
+    const perBeat = 12 / step;            // 4 in a binary groove, 3 in a ternary one
 
     g.clearRect(0, 0, W, H);
 
-    // faint sixteenth ticks, emphasized once per beat
+    // The three tuned drums are one instrument; band them together.
     g.save();
     g.translate(cx, cy);
+    const famIdx = players.map((p, i) => ({ p, i }))
+      .filter(x => x.p.id === "floor" || x.p.id === "column" || x.p.id === "arch")
+      .map(x => x.i);
+    if (famIdx.length === 3) {
+      const rAt = i => rMax - (i / (players.length - 1)) * (rMax - rMin);
+      const outer = rAt(Math.min.apply(null, famIdx)) + 9;
+      const inner = rAt(Math.max.apply(null, famIdx)) - 9;
+      g.fillStyle = "rgba(217,127,82,0.055)";
+      g.beginPath();
+      g.arc(0, 0, outer, 0, Math.PI * 2);
+      g.arc(0, 0, Math.max(2, inner), 0, Math.PI * 2, true);
+      g.fill();
+    }
+
+    // faint subdivision ticks, emphasized once per beat
     for (let s = 0; s < ticks; s++) {
       const a = (s / ticks) * Math.PI * 2 - Math.PI / 2;
-      const major = s % 4 === 0;
+      const major = s % perBeat === 0;
       g.strokeStyle = major ? "rgba(232,230,223,0.16)" : "rgba(232,230,223,0.05)";
       g.lineWidth = major ? 1.5 : 1;
       g.beginPath();

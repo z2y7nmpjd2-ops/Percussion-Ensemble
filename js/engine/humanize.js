@@ -1,6 +1,6 @@
 /* LATTICE — humanize.js
  * Everything that separates a machine grid from a circle of players:
- *  - LILT: a shared, systematic lean of certain grid positions
+ *  - LILT: a shared, systematic lean of the subdivisions inside a beat
  *  - SPREAD: each player's personal placement (ahead / behind the beat)
  *  - LOOSE: gaussian jitter + slow drift + velocity life
  * All offsets are returned in SECONDS relative to the exact grid time.
@@ -9,6 +9,7 @@
   "use strict";
 
   const H = {};
+  const PPB = 12;                 // pulses per beat
 
   // Box–Muller gaussian, mean 0, sigma 1.
   H.gauss = function () {
@@ -19,52 +20,57 @@
   };
 
   /* LILT — the grid itself breathes.
-   * Cycle = 48 pulses, beat = 12 pulses. Within each beat, the four
-   * 16th positions (0,3,6,9) get a lean profile: the 2nd and 4th 16ths
-   * arrive late, the 3rd slightly early — a rolling, non-even feel that
-   * morphs continuously with the lilt control. Off-grid pulses (sextuplet
-   * positions) inherit an interpolated lean, so dense fills ride the
-   * same wave instead of snapping straight.
+   * A groove's feel carries a lean value per subdivision within the beat:
+   * four values for a binary groove (subdivision every 3 pulses), three
+   * for a ternary one (every 4). Pulses that fall between subdivisions
+   * — the fast fills — inherit an interpolated lean, so dense passages
+   * ride the same wave instead of snapping back to straight time.
    */
-  const LEAN_16 = [0.0, 0.42, -0.08, 0.3]; // per 16th within a beat, in fractions of max lean
-  H.lilt = function (pulseInCycle, liltAmt, pulseDur, lean16) {
-    const L16 = lean16 || LEAN_16;             // each groove carries its own feel
-    const inBeat = pulseInCycle % 12;          // 0..11
-    const pos = inBeat / 3;                    // 0..4 (fractional for off-16th pulses)
-    const i = Math.floor(pos) % 4;
-    const j = (i + 1) % 4;
+  const DEFAULT_LEAN = [0, 0.42, -0.08, 0.3];
+
+  H.lilt = function (pulseInCycle, liltAmt, pulseDur, feel) {
+    const lean = (feel && feel.lean) || DEFAULT_LEAN;
+    const slots = lean.length;
+    const step = PPB / slots;                  // 3 for binary, 4 for ternary
+    const pos = (pulseInCycle % PPB) / step;   // 0..slots, fractional off-subdivision
+    const i = Math.floor(pos) % slots;
+    const j = (i + 1) % slots;
     const frac = pos - Math.floor(pos);
-    const lean = L16[i] * (1 - frac) + L16[j] * frac;
-    // max lean at full lilt: ~40% of a pulse
-    return lean * liltAmt * pulseDur * 0.4;
+    const v = lean[i] * (1 - frac) + lean[j] * frac;
+    // at full lilt, the largest lean is ~40% of a pulse
+    return v * liltAmt * pulseDur * 0.4;
   };
 
   /* SPREAD — a persistent personality per player.
    * lean:  ms, negative = pushes ahead, positive = lays back
    * driftRate/driftAmt: a slow sinusoidal wander of that lean
    * jitter: per-stroke sigma in ms (scaled again by the Loose control)
+   *
+   * The timeline is the tightest thing in the circle; the low drum sits
+   * furthest back; the lead leans forward into its phrases.
    */
   H.profiles = {
-    keel:  { lean: -1.5, driftRate: 0.011, driftAmt: 1.0, jitter: 1.2 },
-    root:  { lean:  4.5, driftRate: 0.007, driftAmt: 2.0, jitter: 2.2 },
-    weave: { lean:  1.5, driftRate: 0.013, driftAmt: 1.6, jitter: 2.6 },
-    spark: { lean: -3.0, driftRate: 0.017, driftAmt: 2.2, jitter: 2.8 },
-    grain: { lean:  2.5, driftRate: 0.009, driftAmt: 1.4, jitter: 3.2 },
-    halo:  { lean:  6.0, driftRate: 0.005, driftAmt: 2.4, jitter: 3.5 }
+    spine:  { lean: -1.2, driftRate: 0.011, driftAmt: 0.8, jitter: 1.1 },
+    floor:  { lean:  5.0, driftRate: 0.006, driftAmt: 2.2, jitter: 2.3 },
+    column: { lean:  3.0, driftRate: 0.009, driftAmt: 1.8, jitter: 2.4 },
+    arch:   { lean:  1.2, driftRate: 0.012, driftAmt: 1.5, jitter: 2.6 },
+    drive:  { lean:  0.8, driftRate: 0.008, driftAmt: 1.2, jitter: 2.0 },
+    caller: { lean: -3.2, driftRate: 0.017, driftAmt: 2.4, jitter: 2.9 }
   };
 
   // Full offset for one stroke of one player.
   H.offset = function (playerId, pulseInCycle, absTime, ctl, pulseDur, feel) {
-    const p = H.profiles[playerId] || H.profiles.weave;
+    const p = H.profiles[playerId] || H.profiles.drive;
     // A groove may nudge a player's personal lean, so the same figures
     // sit differently against each other from one groove to the next.
     const ov = feel && feel.profiles && feel.profiles[playerId];
     const lean = (ov && typeof ov.lean === "number") ? ov.lean : p.lean;
-    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur, feel && feel.lean);
-    off += (lean / 1000) * ctl.spread * 2;                   // personal lean
+
+    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur, feel);
+    off += (lean / 1000) * ctl.spread * 2;                    // personal lean
     off += (p.driftAmt / 1000) * ctl.spread *
-           Math.sin(absTime * p.driftRate * 2 * Math.PI);    // slow wander
-    off += (p.jitter / 1000) * (0.25 + ctl.loose * 1.5) * H.gauss(); // per-stroke jitter
+           Math.sin(absTime * p.driftRate * 2 * Math.PI);     // slow wander
+    off += (p.jitter / 1000) * (0.25 + ctl.loose * 1.5) * H.gauss();
     return off;
   };
 
@@ -72,10 +78,9 @@
    * Downbeats are kept steadier than weak positions (players guard the one).
    */
   H.velocity = function (accent, pulseInCycle, ctl) {
-    const onBeat = (pulseInCycle % 12) === 0;
+    const onBeat = (pulseInCycle % PPB) === 0;
     const sigma = (onBeat ? 0.05 : 0.1) * (0.4 + ctl.loose);
     let v = accent * (1 + sigma * H.gauss());
-    // heat opens the dynamic ceiling a little
     v *= 0.82 + ctl.heat * 0.22;
     return Math.max(0.05, Math.min(1, v));
   };
@@ -85,8 +90,9 @@
    * probabilities are tiny — the point is that the fabric frays at the
    * edges, never at the anchors.
    */
-  H.articulate = function (ev, pulseInCycle, ctl) {
-    const weak = (pulseInCycle % 6) !== 0;
+  H.articulate = function (ev, pulseInCycle, ctl, step) {
+    const sub = step || 3;
+    const weak = (pulseInCycle % (sub * 2)) !== 0;
     if (weak && !ev.anchor) {
       if (Math.random() < 0.015 + ctl.loose * 0.03) return null; // breath
       if (ev.soft && Math.random() < 0.05 + ctl.loose * 0.1) {

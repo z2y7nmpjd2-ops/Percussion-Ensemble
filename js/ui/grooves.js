@@ -74,14 +74,15 @@
       chips.appendChild(s);
     };
     add(set.seed || "—", "seed");
+    if (m.meter) add(m.meter);
     if (m.beats) add(m.beats + "-beat cycle");
-    if (m.key) add("key " + m.key);
+    if (m.key) add("timeline " + m.key);
     if (m.archetype) add(m.archetype);
     if (m.feel) add(m.feel + " feel");
-    if (m.low) add("low: " + m.low);
-    if (m.mid) add("mid: " + m.mid);
-    if (m.grain) add("texture: " + m.grain);
-    if (m.grainLock) add("accents on the " + m.grainLock);
+    if (m.tuning) add("tuned in " + m.tuning);
+    if (m.contour) add("line: " + m.contour);
+    if (m.bells) add("strikers: " + m.bells);
+    if (m.engine) add("engine: " + m.engine);
     this.markCurrentRow();
   };
 
@@ -229,10 +230,10 @@
       const seed = document.createElement("code");
       seed.textContent = item.seed;
       meta.appendChild(seed);
-      const rest = [m.beats ? m.beats + " beats" : null,
-                    m.key ? "key " + m.key : null,
-                    m.archetype || null,
-                    m.feel ? m.feel + " feel" : null,
+      const rest = [m.meter || null,
+                    m.beats ? m.beats + " beats" : null,
+                    m.key ? "timeline " + m.key : null,
+                    m.tuning ? "tuned in " + m.tuning : null,
                     item.tempo ? item.tempo + " bpm" : null]
                    .filter(Boolean).join("  ·  ");
       meta.appendChild(document.createTextNode(rest ? "  ·  " + rest : ""));

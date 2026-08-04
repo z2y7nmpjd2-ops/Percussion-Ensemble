@@ -1,8 +1,8 @@
 /* LATTICE — generator.js
- * Grows a whole groove from a short seed: the length of the cycle, the
- * guide line's key figure, the strategy each part uses to place itself
- * against that figure, the lead's motif bank, and the feel of the grid
- * itself. Same seed, same groove, forever.
+ * Grows a whole circle from a short seed: its meter, the length of its
+ * cycle, how the drum family is tuned, the timeline everyone hangs on,
+ * the composite melody the family shares, the strikers that interlock
+ * above it, the engine underneath, and the lead's vocabulary.
  *
  * Generation is constrained rather than random: parts are placed
  * relative to what is already on the grid, so the interlock survives
@@ -14,6 +14,7 @@
 
   const G = {};
   const PPB = 12;                 // pulses per beat — constant across grooves
+  const FAM = ["floor", "column", "arch"];
 
   /* ---------- seeded random ---------- */
 
@@ -39,22 +40,12 @@
     };
   }
 
-  function Rng(seed) {
-    this.next = mulberry32(xmur3(String(seed))());
-  }
+  function Rng(seed) { this.next = mulberry32(xmur3(String(seed))()); }
   Rng.prototype.int = function (n) { return Math.floor(this.next() * n); };
   Rng.prototype.intRange = function (a, b) { return a + this.int(b - a + 1); };
   Rng.prototype.range = function (a, b) { return a + this.next() * (b - a); };
   Rng.prototype.pick = function (arr) { return arr[this.int(arr.length)]; };
   Rng.prototype.chance = function (p) { return this.next() < p; };
-  Rng.prototype.shuffle = function (arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = this.int(i + 1);
-      const t = a[i]; a[i] = a[j]; a[j] = t;
-    }
-    return a;
-  };
   Rng.prototype.weighted = function (items, weights) {
     let total = 0;
     for (const w of weights) total += w;
@@ -65,7 +56,6 @@
     }
     return items[items.length - 1];
   };
-  // n distinct draws, each weighted by score(item)
   Rng.prototype.drawN = function (pool, score, n) {
     const rest = pool.slice(), out = [];
     while (out.length < n && rest.length) {
@@ -91,12 +81,17 @@
     return out.length ? out : [min];
   }
 
-  // One stroke per pulse per part: keep the loudest, inherit any anchor.
+  /* One stroke per pulse per HAND. A family player holds a stick over the
+   * drum and a striker in the other hand, so a drum stroke and a striker
+   * stroke may land on the same pulse — that pairing is a large part of
+   * how the family sounds. Two strokes on the same drum at the same
+   * instant is the impossible case, and that is what collapses here. */
   function dedupe(ev) {
     const by = new Map();
     for (const e of ev) {
-      const cur = by.get(e.p);
-      if (!cur) { by.set(e.p, Object.assign({}, e)); continue; }
+      const hand = e.p + (e.stroke.indexOf(".bell") > 0 ? ":s" : ":d");
+      const cur = by.get(hand);
+      if (!cur) { by.set(hand, Object.assign({}, e)); continue; }
       if (e.anchor) cur.anchor = true;
       if (e.a > cur.a) { cur.stroke = e.stroke; cur.a = e.a; cur.soft = e.soft; }
       if (cur.anchor) { delete cur.d; delete cur.h; }
@@ -118,8 +113,8 @@
                "Low", "Late", "Dry", "Cool", "Iron", "Glass", "Paper", "Ash", "Salt",
                "Long", "Half", "Open", "Close", "Pale", "Rough", "Still", "Tilted",
                "Hollow", "Folded", "Patient", "Crooked", "Level", "Distant", "Woven"];
-  const NOUN = ["Lattice", "Drift", "Weave", "Pulse", "Column", "Current", "Braid", "Ladder",
-                "Spiral", "Anchor", "Thread", "Frame", "Circuit", "Ridge", "Seam", "Bend",
+  const NOUN = ["Circle", "Drift", "Weave", "Pulse", "Column", "Current", "Braid", "Ladder",
+                "Spiral", "Anchor", "Thread", "Frame", "Ring", "Ridge", "Seam", "Bend",
                 "Field", "Chain", "Gate", "Terrace", "Furrow", "Span", "Shelf", "Lock",
                 "Vessel", "Rafter", "Harbour", "Signal", "Cradle", "Quarry", "Beam"];
 
@@ -128,435 +123,440 @@
     return R.pick(ADJ) + " " + R.pick(NOUN);
   };
 
-  /* ---------- groove archetypes ----------
-   * A whole-ensemble disposition. It decides how many anchors the low
-   * voice guards, how busy the middle is, what the texture is allowed to
-   * do, and how large the lead's vocabulary gets. */
+  /* ---------- archetypes ---------- */
 
   const ARCHETYPES = [
-    { id: "open",    root: [2, 3], weave: [3, 5], halo: [1, 2], tiers: 4, calls: 2,
-      grain: ["sparse", "gapped", "pulsed"] },
-    { id: "driving", root: [3, 4], weave: [5, 8], halo: [1, 3], tiers: 5, calls: 3,
-      grain: ["continuous", "gapped", "continuous"] },
-    { id: "talking", root: [2, 3], weave: [5, 7], halo: [2, 3], tiers: 5, calls: 3,
-      grain: ["gapped", "pulsed", "continuous"] },
-    { id: "deep",    root: [3, 4], weave: [3, 5], halo: [1, 2], tiers: 3, calls: 2,
-      grain: ["sparse", "pulsed"] },
-    { id: "shimmer", root: [2, 3], weave: [4, 6], halo: [2, 4], tiers: 4, calls: 2,
-      grain: ["shimmer", "continuous", "shimmer"] }
+    { id: "open",    famDensity: [0.3, 0.45], bells: ["sparse", "layer"],
+      engine: ["plain"],            tiers: 4, calls: 2, mutes: [0, 2] },
+    { id: "driving", famDensity: [0.5, 0.72], bells: ["split", "double"],
+      engine: ["busy", "plain"],    tiers: 5, calls: 3, mutes: [2, 5] },
+    { id: "talking", famDensity: [0.42, 0.62], bells: ["layer", "split"],
+      engine: ["plain", "busy"],    tiers: 5, calls: 3, mutes: [1, 4] },
+    { id: "deep",    famDensity: [0.3, 0.48], bells: ["sparse", "layer"],
+      engine: ["plain", "spare"],   tiers: 3, calls: 2, mutes: [1, 3] },
+    { id: "rolling", famDensity: [0.48, 0.68], bells: ["split", "layer"],
+      engine: ["busy"],             tiers: 4, calls: 2, mutes: [2, 4] }
   ];
 
-  /* ---------- feel: how the grid itself leans ---------- */
+  /* ---------- meter, tuning, feel ---------- */
 
-  const FEELS = [
+  // Four values per beat in a binary groove, three in a ternary one.
+  const FEELS_BINARY = [
     { id: "even",     lean: [0, 0.10, -0.02, 0.08] },
     { id: "rolling",  lean: [0, 0.42, -0.08, 0.30] },
     { id: "leaning",  lean: [0, 0.55, 0.04, 0.36] },
     { id: "pushed",   lean: [0, 0.24, -0.20, 0.14] },
     { id: "dragged",  lean: [0, 0.36, 0.18, 0.46] },
-    { id: "lurching", lean: [0, 0.62, -0.14, 0.22] },
     { id: "level",    lean: [0, 0.04, 0.02, 0.05] }
   ];
+  const FEELS_TERNARY = [
+    { id: "even",     lean: [0, 0.05, 0.03] },
+    { id: "rolling",  lean: [0, 0.18, 0.08] },
+    { id: "leaning",  lean: [0, 0.28, 0.13] },
+    { id: "pushed",   lean: [0, 0.10, -0.07] },
+    { id: "dragged",  lean: [0, 0.22, 0.21] },
+    { id: "level",    lean: [0, 0.03, 0.02] }
+  ];
 
-  // Each groove also nudges the players' personal timing, so two grooves
-  // with the same figures still sit differently against each other.
   function genProfiles(R) {
     const out = {};
-    for (const id of ["keel", "root", "weave", "spark", "grain", "halo"]) {
+    for (const id of ["spine", "floor", "column", "arch", "drive", "caller"]) {
       if (!R.chance(0.55)) continue;
-      const span = id === "keel" ? 2 : 7;
+      const span = id === "spine" ? 2 : 7;
       out[id] = { lean: r2(R.range(-span, span)) };
     }
     return out;
   }
 
-  function genFeel(R) {
-    const base = R.pick(FEELS);
+  function genFeel(R, meter) {
+    const base = R.pick(meter === "ternary" ? FEELS_TERNARY : FEELS_BINARY);
+    const jit = meter === "ternary" ? 0.04 : 0.07;
     return {
       id: base.id,
-      lean: base.lean.map((v, i) => (i === 0 ? 0 : r2(v + R.range(-0.07, 0.07)))),
+      lean: base.lean.map((v, i) => (i === 0 ? 0 : r2(v + R.range(-jit, jit)))),
       profiles: genProfiles(R)
     };
   }
 
-  /* ---------- the guide line ----------
-   * Either an uneven key figure — a partition of the cycle whose spans
-   * differ — or a steady pulse carrying a cross-cutting accent pattern. */
+  // The family is tuned as a set — its intervals are what make the
+  // composite line read as a melody rather than three separate drums.
+  const TUNINGS = [
+    { id: "fourths", r: [1, 4 / 3, 2] },
+    { id: "fifths",  r: [1, 3 / 2, 2] },
+    { id: "open",    r: [1, 3 / 2, 9 / 4] },
+    { id: "close",   r: [1, 5 / 4, 3 / 2] },
+    { id: "wide",    r: [1, 4 / 3, 7 / 3] }
+  ];
 
-  function genKey(R, ppc) {
-    const mode = R.weighted(["uneven", "pulse"], [3.2, 1]);
+  function genTuning(R) {
+    const t = R.pick(TUNINGS);
+    const base = R.range(62, 84);
+    return {
+      id: t.id,
+      tuning: {
+        floor:  Math.round(base),
+        column: Math.round(base * t.r[1]),
+        arch:   Math.round(base * t.r[2]),
+        drive:  Math.round(R.range(80, 100)),
+        caller: Math.round(R.range(98, 122))
+      }
+    };
+  }
+
+  /* ---------- the timeline ---------- */
+
+  function genSpine(R, ppc, step) {
+    const mode = R.weighted(["uneven", "pulse"], [3.4, 1]);
 
     if (mode === "pulse") {
-      const step = R.pick(divisors(ppc, 4, Math.max(4, Math.floor(ppc / 3))));
-      const pos = grid(ppc, step);
+      const cands = divisors(ppc, step, Math.max(step, Math.floor(ppc / 3)))
+        .filter(d => d % step === 0);
+      const s = R.pick(cands.length ? cands : [step]);
+      const pos = grid(ppc, s);
       const every = R.intRange(2, 4);
-      const rot = R.int(pos.length);
-      return { mode: "pulse", pos: pos, iv: [step], accentEvery: every, accentFrom: rot };
+      const from = R.int(pos.length);
+      const ev = pos.map((p, i) => {
+        const strong = ((i - from) % every + every) % every === 0;
+        return { p: p, stroke: strong ? "spine.high" : "spine.low",
+                 a: strong ? r2(R.range(0.88, 1.0)) : r2(R.range(0.55, 0.7)),
+                 anchor: true };
+      });
+      return { mode: "pulse", pos: pos, key: "pulse /" + (s / step),
+               part: { base: dedupe(ev), variants: [] } };
     }
 
-    const spans = [4, 6, 8, 9, 10, 12, 14, 15, 16, 18];
-    const wts   = [0.5, 1.5, 0.7, 1.5, 0.6, 1.1, 0.4, 0.6, 0.5, 0.5];
-    for (let attempt = 0; attempt < 800; attempt++) {
-      const iv = [];
+    // An uneven partition of the cycle into spans that are all multiples
+    // of the subdivision. Even partitions are rejected: they would give
+    // the circle nothing to lean on.
+    const spans = [1, 2, 3, 4, 5].map(k => k * step);
+    const wts   = [0.5, 1.6, 1.5, 0.8, 0.35];
+    let pos = null, iv = null;
+    for (let attempt = 0; attempt < 900; attempt++) {
+      const cand = [];
       let sum = 0;
-      while (sum < ppc && iv.length < 9) {
+      while (sum < ppc && cand.length < 9) {
         const v = R.weighted(spans, wts);
         if (sum + v > ppc) break;
-        iv.push(v); sum += v;
+        cand.push(v); sum += v;
       }
-      if (sum !== ppc || iv.length < 4) continue;
-      if (new Set(iv).size < 2) continue;            // must be uneven
-      let pos = []; let p = 0;
-      for (const v of iv) { pos.push(p); p += v; }
-      if (!pos.some(x => x % PPB !== 0)) continue;    // must cut across the beat
-      // The figure need not begin on the downbeat.
-      if (R.chance(0.3)) {
-        const rot = R.pick(grid(ppc, 3).slice(1));
-        pos = pos.map(x => (x + rot) % ppc).sort((a, b) => a - b);
-      }
-      return { mode: "uneven", iv: iv, pos: pos };
+      if (sum !== ppc || cand.length < 4) continue;
+      if (new Set(cand).size < 2) continue;
+      let p = 0; const ps = [];
+      for (const v of cand) { ps.push(p); p += v; }
+      if (!ps.some(x => x % PPB !== 0)) continue;      // must cut across the beat
+      pos = ps; iv = cand;
+      break;
     }
-    return { mode: "uneven", iv: [9, 9, 6, 9, 9, 6].slice(0, Math.max(4, ppc / 9)),
-             pos: grid(ppc, 9) };
-  }
+    if (!pos) { pos = grid(ppc, step * 2); iv = pos.map(() => step * 2); }
 
-  function genKeel(R, key) {
-    let ev;
-    if (key.mode === "pulse") {
-      ev = key.pos.map((p, i) => {
-        const strong = ((i - key.accentFrom) % key.accentEvery + key.accentEvery)
-                       % key.accentEvery === 0;
-        return {
-          p: p,
-          stroke: strong ? "keel.tick" : "keel.tock",
-          a: strong ? r2(R.range(0.88, 1.0)) : r2(R.range(0.55, 0.7)),
-          anchor: true
-        };
-      });
-    } else {
-      // Long spans open with the lower pitch — the figure states its shape.
-      ev = key.pos.map((p, i) => ({
-        p: p,
-        stroke: key.iv[i % key.iv.length] >= 9 ? "keel.tock" : "keel.tick",
-        a: i === 0 ? 1.0 : r2(R.range(0.76, 0.92)),
-        anchor: true
-      }));
-      if (ev.length) ev[0].stroke = "keel.tick";
-    }
-    return { base: dedupe(ev), variants: [] };
-  }
-
-  /* ---------- low anchor ---------- */
-
-  function rootGaps(R, C, want, lockOne) {
-    const off = grid(C.ppc, 3).filter(p => C.keyPos.indexOf(p) < 0);
-    const score = p => (p % PPB === 0 ? 2.2 : 1) + (p % 6 === 0 ? 0.8 : 0);
-    const half = C.ppc / 2;
-    const fh = off.filter(p => p < half), sh = off.filter(p => p >= half);
-    const anchors = [];
-    if (fh.length) anchors.push(R.drawN(fh, score, 1)[0]);
-    if (sh.length) anchors.push(R.drawN(sh, score, 1)[0]);
-    while (anchors.length < want) {
-      const rest = off.filter(p => anchors.indexOf(p) < 0);
-      if (!rest.length) break;
-      anchors.push(R.drawN(rest, score, 1)[0]);
-    }
-    // A locked groove lets the low voice double one guide stroke.
-    if (lockOne && C.keyPos.length) anchors[anchors.length - 1] = R.pick(C.keyPos);
-    return Array.from(new Set(anchors)).sort((a, b) => a - b);
-  }
-
-  function genRoot(R, C) {
-    const style = R.weighted(["gaps", "lock", "line", "pedal"], [2.2, 1.1, 1.0, 0.9]);
-    const want = R.intRange(C.arch.root[0], C.arch.root[1]);
-    let anchors = [], ev = [];
-
-    if (style === "line") {
-      // A two-tone walking figure: opens anchor it, presses fill between.
-      const step = R.pick([9, 12, 15, 18].filter(s => s * 2 <= C.ppc));
-      let p = R.pick(grid(C.ppc, 3).slice(0, 5));
-      let i = 0;
-      while (p < C.ppc) {
-        const open = i % 2 === 0;
-        const e = { p: p, stroke: open ? "root.open" : "root.press",
-                    a: open ? r2(R.range(0.78, 0.95)) : r2(R.range(0.45, 0.6)) };
-        if (open) { e.anchor = true; anchors.push(p); }
-        else e.d = r2(R.range(0.2, 0.45));
-        ev.push(e);
-        p += step; i++;
-      }
-    } else if (style === "pedal") {
-      // A regular tread, sometimes cutting across the beat.
-      const step = R.pick(divisors(C.ppc, 8, Math.max(8, Math.floor(C.ppc / 2))));
-      anchors = grid(C.ppc, step);
-      ev = anchors.map((p, i) => ({
-        p: p, stroke: "root.open",
-        a: i === 0 ? 0.95 : r2(R.range(0.72, 0.88)), anchor: true
-      }));
-    } else {
-      anchors = rootGaps(R, C, want, style === "lock");
-      ev = anchors.map((p, i) => ({
-        p: p, stroke: "root.open",
-        a: i === 0 ? 0.9 : r2(R.range(0.78, 1.0)), anchor: true
-      }));
-    }
-
-    if (anchors.length < 2) {                       // never leave the ground unguarded
-      anchors = rootGaps(R, C, Math.max(2, want), false);
-      ev = anchors.map(p => ({ p: p, stroke: "root.open", a: 0.88, anchor: true }));
-    }
-
-    if (style !== "line") {
-      const pool = grid(C.ppc, 3).filter(p => anchors.indexOf(p) < 0);
-      const presses = R.drawN(pool, p => (p % 6 === 3 ? 1.5 : 1), R.intRange(2, 5));
-      for (const p of presses) {
-        ev.push({ p: p, stroke: "root.press",
-                  a: r2(R.range(0.42, 0.62)), d: r2(R.range(0.18, 0.58)) });
-      }
-    }
-    return { anchors: anchors, style: style, part: { base: dedupe(ev), variants: [], response: null } };
-  }
-
-  /* ---------- mid voice: lives where the low anchor doesn't ---------- */
-
-  function genWeave(R, C) {
-    const style = R.weighted(["punctuate", "ride", "answer"], [2.2, 1.2, 1.0]);
-    const want = R.intRange(C.arch.weave[0], C.arch.weave[1]);
-    const free = p => C.rootAnchors.indexOf(p) < 0;
-    let ev = [];
-
-    if (style === "ride") {
-      // A running line at one subdivision, snapped at a cross-period.
-      const step = R.pick([2, 3, 3, 4, 6]);
-      const period = R.intRange(3, 5);
-      const off = R.int(period);
-      grid(C.ppc, step).forEach((p, i) => {
-        const strong = ((i - off) % period + period) % period === 0;
-        if (strong && free(p)) {
-          ev.push({ p: p, stroke: "weave.snap", a: r2(R.range(0.74, 0.9)),
-                    anchor: i === off });
-        } else {
-          ev.push({ p: p, stroke: "weave.touch", a: r2(R.range(0.3, 0.45)),
-                    d: r2(R.range(0.3, 0.6)) });
-        }
-      });
-    } else {
-      // Sparse tones and snaps: either spread over the cycle, or clustered
-      // into one half so the other half stays open for the lead.
-      let cands = grid(C.ppc, 3).filter(free);
-      if (style === "answer") {
-        const half = C.ppc / 2;
-        const late = R.chance(0.6);
-        const win = cands.filter(p => (late ? p >= half : p < half));
-        if (win.length >= 3) cands = win;
-      }
-      const score = p => (p % PPB === 0 ? 0.45 : 1.6) + (p % 6 === 3 ? 0.7 : 0) +
-                         (C.keyPos.indexOf(p) >= 0 ? -0.3 : 0.2);
-      const chosen = R.drawN(cands, score, Math.min(want, cands.length)).sort((a, b) => a - b);
-      const snapPool = chosen.filter(p => p % PPB !== 0);
-      const snaps = R.drawN(snapPool.length ? snapPool : chosen, () => 1,
-                            snapPool.length > 1 ? R.intRange(1, 2) : 1);
-      ev = chosen.map(p => snaps.indexOf(p) >= 0
-        ? { p: p, stroke: "weave.snap", a: r2(R.range(0.76, 0.9)), anchor: true }
-        : { p: p, stroke: "weave.tone", a: r2(R.range(0.58, 0.74)), soft: "weave.touch" });
-    }
-
-    // Ghost layer on sextuplet positions — only heard as Heat comes up.
-    const taken = ev.map(e => e.p);
-    const sextPool = [];
-    for (let p = 0; p < C.ppc; p += 2) if (p % 3 !== 0 && taken.indexOf(p) < 0) sextPool.push(p);
-    for (const p of R.drawN(sextPool, () => 1, R.intRange(2, 4))) {
-      ev.push({ p: p, stroke: "weave.touch", a: r2(R.range(0.26, 0.38)),
-                h: r2(R.range(0.35, 0.65)) });
-    }
-
-    // A stitched pair inside one beat, gated by Density.
-    if (style !== "ride") {
-      const s0 = R.int(C.ppc / PPB) * PPB + R.pick([2, 4, 8]);
-      ev.push({ p: s0 % C.ppc, stroke: "weave.touch", a: 0.4, d: 0.55 });
-      ev.push({ p: (s0 + 2) % C.ppc, stroke: "weave.touch", a: 0.45, d: 0.55 });
-    }
-
-    if (!ev.some(e => e.anchor) && ev.length) {
-      const loud = ev.reduce((a, b) => (b.a > a.a ? b : a));
-      loud.anchor = true; delete loud.d; delete loud.h;
-    }
-    return { style: style, part: { base: dedupe(ev), variants: [], response: null } };
-  }
-
-  /* ---------- texture ---------- */
-
-  function genGrain(R, C) {
-    const style = R.pick(C.arch.grain);
-    const lockKey = R.chance(0.4);   // accents follow the key figure, not the beat
-    const beats = C.ppc / PPB;
-    let step, active;
-
-    if (style === "shimmer") { step = 2; active = null; }
-    else if (style === "sparse") { step = R.pick([6, 12]); active = null; }
-    else { step = R.pick([3, 3, 6]); active = null; }
-
-    if (style === "gapped") {
-      // Rest for one or two beats — air is part of the pattern.
-      const rest = R.drawN(grid(beats, 1), () => 1, R.intRange(1, Math.max(1, beats - 2)));
-      active = b => rest.indexOf(b) < 0;
-    } else if (style === "pulsed") {
-      // Only certain beats carry texture, and they carry it densely.
-      const on = R.drawN(grid(beats, 1), b => (b === 0 ? 2 : 1),
-                         R.intRange(2, Math.max(2, beats - 1)));
-      active = b => on.indexOf(b) >= 0;
-      step = R.pick([2, 3]);
-    }
-
-    const ev = [];
-    let i = 0;
-    for (let p = 0; p < C.ppc; p += step) {
-      if (active && !active(Math.floor(p / PPB))) { i++; continue; }
-      let a;
-      if (lockKey && C.keyPos.indexOf(p) >= 0) a = 0.9;
-      else if (p % PPB === 0) a = lockKey ? 0.62 : 0.9;
-      else if (p % 6 === 0) a = 0.55;
-      else a = 0.38;
-      if (style === "shimmer") a *= 0.72;
-      const gated = step < 6 && p % 6 !== 0;
-      ev.push({
-        p: p,
-        stroke: i % 2 === 0 ? "grain.push" : "grain.pull",
-        a: r2(a),
-        d: gated ? r2(R.range(0.22, 0.45)) : 0,
-        anchor: !gated && p % PPB === 0 && style !== "shimmer"
-      });
-      i++;
-    }
-
-    // Sextuplet infill in one beat, needing both Density and Heat.
-    if (style !== "shimmer") {
-      const base = R.int(beats) * PPB;
-      [2, 4, 8, 10].forEach((o, k) => {
-        if (R.chance(0.65)) {
-          ev.push({ p: (base + o) % C.ppc, stroke: k % 2 ? "grain.push" : "grain.pull",
-                    a: r2(R.range(0.36, 0.48)), d: 0.6, h: r2(R.range(0.45, 0.65)) });
-        }
-      });
-    }
-    return { style: style, step: step, lockKey: lockKey,
+    const ev = pos.map((p, i) => ({
+      p: p,
+      stroke: iv[i] > step ? "spine.high" : "spine.low",
+      a: i === 0 ? 1.0 : r2(R.range(0.76, 0.92)),
+      anchor: true
+    }));
+    if (ev.length) ev[0].stroke = "spine.high";
+    return { mode: "uneven", pos: pos, key: iv.join("·"),
              part: { base: dedupe(ev), variants: [] } };
   }
 
-  /* ---------- color ---------- */
+  /* ---------- the family's composite melody ----------
+   * The three drums are written as ONE line: a rhythm across the
+   * subdivision grid, and a contour that says which drum speaks each
+   * time. Stepwise motion is preferred, and the line resolves onto the
+   * low drum at structural points — that resolution is what makes three
+   * drums sound like one instrument with a range. */
 
-  function genHalo(R, C) {
-    const style = R.weighted(["turns", "figure", "tail"], [2, 1, 1]);
-    const ev = [];
-    if (style === "figure") {
-      // A small repeating shape rather than isolated points.
-      const step = R.pick(divisors(C.ppc, 12, Math.max(12, C.ppc / 2)));
-      grid(C.ppc, step).forEach((p, i) => {
-        ev.push({ p: p, stroke: i === 0 ? "halo.ring" : "halo.damp",
-                  a: r2(R.range(0.4, 0.6)), d: r2(R.range(0.3, 0.55)) });
-      });
-    } else {
-      const late = C.ppc - PPB;
-      const pool = style === "tail"
-        ? grid(C.ppc, 3).filter(p => p >= late)
-        : C.keyPos.filter(p => p >= PPB).concat(grid(C.ppc, 6).filter(p => p >= C.ppc / 2));
-      const picks = R.drawN(pool.length ? pool : grid(C.ppc, 6), () => 1,
-                            R.intRange(C.arch.halo[0], C.arch.halo[1]));
-      picks.forEach((p, i) => ev.push({
-        p: p, stroke: i === 0 ? "halo.ring" : "halo.damp",
-        a: r2(R.range(0.4, 0.65)), d: r2(R.range(0.25, 0.5)),
-        h: i > 1 ? r2(R.range(0.5, 0.7)) : undefined
-      }));
+  const CONTOURS = ["rise", "fall", "arch", "valley", "rock", "pedal"];
+
+  function contourLevels(R, count, shape) {
+    const lv = [];
+    let cur = 0;
+    for (let i = 0; i < count; i++) {
+      const t = count > 1 ? i / (count - 1) : 0;
+      let target;
+      if (shape === "rise") target = t * 2;
+      else if (shape === "fall") target = (1 - t) * 2;
+      else if (shape === "arch") target = Math.sin(t * Math.PI) * 2;
+      else if (shape === "valley") target = 2 - Math.sin(t * Math.PI) * 2;
+      else if (shape === "rock") target = Math.sin(t * Math.PI * 2) + 1;
+      else target = (i % 4 === 0) ? 0 : 1 + (R.chance(0.45) ? 1 : 0);   // pedal
+      // stepwise motion toward the target, with the occasional leap
+      if (cur < target - 0.4) cur += 1;
+      else if (cur > target + 0.4) cur -= 1;
+      else if (R.chance(0.22)) cur += R.chance(0.5) ? 1 : -1;
+      lv.push(Math.max(0, Math.min(2, cur)));
+      cur = lv[lv.length - 1];
     }
-    return { style: style, part: { base: dedupe(ev), variants: [] } };
+    return lv;
   }
 
-  /* ---------- lead: phrase grammars, a bank, and the graph between ---------- */
+  function genFamilyLine(R, C) {
+    const g = grid(C.ppc, C.step);
+    const dens = R.range(C.arch_.famDensity[0], C.arch_.famDensity[1]);
+    const n = Math.max(4, Math.min(g.length, Math.round(g.length * dens)));
+    const score = p => (p % PPB === 0 ? 2.0 : 1) +
+                       (C.spinePos.indexOf(p) >= 0 ? 0.5 : 0.3);
+    const pos = R.drawN(g, score, n).sort((a, b) => a - b);
 
-  function phraseWalk(R, ppc, energy) {
-    const count = Math.round(3 + energy * 8);
-    const steps = energy > 0.6 ? [2, 3, 3, 4, 6]
-                : energy > 0.4 ? [3, 3, 4, 6, 9]
-                : [6, 9, 12, 12];
-    let p = R.pick(energy > 0.55 ? [0, 3, 6, 12] : [6, 12, 18, 24]).valueOf() % ppc;
+    const shape = R.pick(CONTOURS);
+    const levels = contourLevels(R, pos.length, shape);
+    // Resolve onto the low drum wherever the cycle turns over.
+    for (let i = 0; i < pos.length; i++) if (pos[i] % C.ppc === 0) levels[i] = 0;
+
+    const out = { floor: [], column: [], arch: [] };
+    for (let i = 0; i < pos.length; i++) {
+      const id = FAM[levels[i]];
+      const onBeat = pos[i] % PPB === 0;
+      const turn = i === 0 || levels[i] !== levels[i - 1];
+      const a = onBeat ? R.range(0.85, 0.98) : (turn ? R.range(0.7, 0.85) : R.range(0.6, 0.75));
+      out[id].push({ p: pos[i], stroke: id + ".open", a: r2(a) });
+    }
+    // Two anchors hold the line: its first stroke and its lowest late one.
+    const first = pos[0], firstId = FAM[levels[0]];
+    markAnchor(out[firstId], first);
+    let lateLow = -1, lateId = null;
+    for (let i = 0; i < pos.length; i++) {
+      if (pos[i] >= C.ppc * 0.4 && (lateLow < 0 || levels[i] <= FAM.indexOf(lateId))) {
+        lateLow = pos[i]; lateId = FAM[levels[i]];
+      }
+    }
+    if (lateId) markAnchor(out[lateId], lateLow);
+
+    // Muted strokes fill where the line is silent — the drum you are not
+    // speaking on still answers under your hand.
+    const used = pos.slice();
+    const freePool = g.filter(p => used.indexOf(p) < 0);
+    const nMute = R.intRange(C.arch_.mutes[0], C.arch_.mutes[1]);
+    for (const p of R.drawN(freePool, () => 1, nMute)) {
+      const id = FAM[R.weighted([0, 1, 2], [1, 1.3, 1.1])];
+      out[id].push({ p: p, stroke: id + ".mute", a: r2(R.range(0.3, 0.45)),
+                     d: r2(R.range(0.35, 0.65)) });
+    }
+
+    // An occasional drag: the same drum twice, a half-subdivision apart.
+    if (R.chance(0.45)) {
+      const i = R.int(pos.length);
+      const id = FAM[levels[i]];
+      const half = Math.max(2, Math.round(C.step / 2));
+      const p2 = pos[i] + half;
+      if (p2 < C.ppc) {
+        out[id].push({ p: p2, stroke: id + ".mute", a: r2(R.range(0.3, 0.4)),
+                       h: r2(R.range(0.45, 0.65)) });
+      }
+    }
+
+    return { parts: out, contour: shape, positions: pos, levels: levels };
+  }
+
+  function markAnchor(list, p) {
+    for (const e of list) if (e.p === p) { e.anchor = true; delete e.d; delete e.h; }
+  }
+
+  /* ---------- the strikers ----------
+   * Each family player carries one. Their patterns are simpler than the
+   * drum parts and interlock with each other, so the subdivision they
+   * produce together is one none of them plays alone. */
+
+  function genBells(R, C, style) {
+    const out = { floor: [], column: [], arch: [] };
+    const g = grid(C.ppc, C.step);
+    const beats = grid(C.ppc, PPB);
+
+    if (style === "split") {
+      // Three hands, one continuous line between them.
+      const off = R.int(3);
+      g.forEach((p, i) => {
+        const id = FAM[(i + off) % 3];
+        out[id].push({ p: p, stroke: id + ".bell",
+                       a: r2(p % PPB === 0 ? R.range(0.5, 0.62) : R.range(0.38, 0.5)),
+                       d: p % PPB === 0 ? 0 : r2(R.range(0.2, 0.4)) });
+      });
+    } else if (style === "layer") {
+      // Low on the beat, mid off it, high tracing the timeline.
+      for (const p of beats) {
+        out.floor.push({ p: p, stroke: "floor.bell", a: r2(R.range(0.5, 0.62)) });
+      }
+      for (const p of g) {
+        if (p % PPB === 0) continue;
+        if (R.chance(0.75)) {
+          out.column.push({ p: p, stroke: "column.bell", a: r2(R.range(0.4, 0.52)),
+                            d: r2(R.range(0.2, 0.4)) });
+        }
+      }
+      for (const p of C.spinePos) {
+        if (R.chance(0.7)) {
+          out.arch.push({ p: p, stroke: "arch.bell", a: r2(R.range(0.36, 0.5)),
+                          d: r2(R.range(0.3, 0.55)) });
+        }
+      }
+    } else if (style === "double") {
+      for (const p of beats) {
+        out.floor.push({ p: p, stroke: "floor.bell", a: r2(R.range(0.5, 0.62)) });
+        out.column.push({ p: p, stroke: "column.bell", a: r2(R.range(0.42, 0.54)) });
+      }
+      for (const p of g) {
+        out.arch.push({ p: p, stroke: "arch.bell", a: r2(R.range(0.34, 0.46)),
+                        d: r2(R.range(0.3, 0.55)) });
+      }
+    } else {                                   // sparse
+      const every = R.pick([1, 2]);
+      beats.forEach((p, i) => {
+        if (i % every !== 0) return;
+        out.floor.push({ p: p, stroke: "floor.bell", a: r2(R.range(0.48, 0.6)) });
+      });
+      for (const p of R.drawN(g.filter(x => x % PPB !== 0), () => 1, R.intRange(1, 3))) {
+        out.column.push({ p: p, stroke: "column.bell", a: r2(R.range(0.36, 0.48)),
+                          d: r2(R.range(0.4, 0.6)) });
+      }
+    }
+    return out;
+  }
+
+  /* ---------- the engine ----------
+   * A repeating cell, stated as many times as the cycle allows. Steady
+   * is the point: this part is what the rest of the circle counts on. */
+
+  function genDrive(R, C) {
+    const beats = C.ppc / PPB;
+    const cellBeats = R.pick(divisors(beats, 1, Math.max(1, beats)));
+    const cellLen = cellBeats * PPB;
+    const reps = C.ppc / cellLen;
+    const style = R.pick(C.arch_.engine);
+
+    const slots = grid(cellLen, C.step);
+    const slapAt = R.drawN(slots.filter(p => p !== 0),
+                           p => (p % PPB === 0 ? 0.6 : 1.5), 1)[0];
+
+    const cell = [];
+    for (const p of slots) {
+      if (p === 0) { cell.push({ p: 0, stroke: "drive.bass", a: 0.9, anchor: true }); continue; }
+      if (p === slapAt) { cell.push({ p: p, stroke: "drive.slap", a: r2(R.range(0.8, 0.92)),
+                                      anchor: true }); continue; }
+      if (style === "spare") {
+        if (R.chance(0.45)) cell.push({ p: p, stroke: "drive.tone", a: r2(R.range(0.55, 0.68)),
+                                        soft: "drive.ghost" });
+      } else if (style === "busy") {
+        cell.push(R.chance(0.55)
+          ? { p: p, stroke: "drive.tone", a: r2(R.range(0.55, 0.7)), soft: "drive.ghost" }
+          : { p: p, stroke: "drive.ghost", a: r2(R.range(0.26, 0.36)), d: r2(R.range(0.3, 0.5)) });
+      } else {
+        if (R.chance(0.7)) {
+          cell.push(R.chance(0.6)
+            ? { p: p, stroke: "drive.tone", a: r2(R.range(0.55, 0.7)), soft: "drive.ghost" }
+            : { p: p, stroke: "drive.ghost", a: r2(R.range(0.26, 0.36)), d: r2(R.range(0.35, 0.55)) });
+        }
+      }
+    }
+
     const ev = [];
-    for (let i = 0; i < count && p < ppc; i++) {
+    for (let rep = 0; rep < reps; rep++) {
+      for (const e of cell) {
+        const c = Object.assign({}, e, { p: e.p + rep * cellLen });
+        if (rep > 0 && c.anchor && c.stroke === "drive.bass") c.a = r2(c.a * 0.94);
+        ev.push(c);
+      }
+    }
+    // The last statement leans out of the cycle rather than repeating flat.
+    if (reps > 1 && R.chance(0.6)) {
+      const last = ev[ev.length - 1];
+      last.stroke = R.chance(0.5) ? "drive.slap" : "drive.tone";
+      last.a = r2(Math.min(1, last.a + 0.12));
+    }
+    return { style: style, cellBeats: cellBeats,
+             part: { base: dedupe(ev), variants: [], response: null } };
+  }
+
+  /* ---------- the lead ---------- */
+
+  function strongStroke(R) {
+    return R.weighted(["caller.slap", "caller.tone", "caller.bass"], [1.5, 1.1, 0.7]);
+  }
+  function weakStroke(R) {
+    return R.chance(0.72) ? "caller.ghost" : "caller.tone";
+  }
+
+  function phraseWalk(R, C, energy) {
+    const count = Math.round(3 + energy * 8);
+    const s = C.step;
+    const steps = energy > 0.6 ? [s / 2, s, s, s * 1.5].map(Math.round)
+                : energy > 0.4 ? [s, s, s * 1.5, s * 2].map(Math.round)
+                : [s * 2, s * 3, s * 3].map(Math.round);
+    let p = R.pick(grid(C.ppc, s).slice(0, 6));
+    const ev = [];
+    for (let i = 0; i < count && p < C.ppc; i++) {
       const strong = i === 0 || i === count - 1 || R.chance(0.3 + energy * 0.2);
-      ev.push({ p: p,
-        stroke: strong ? (R.chance(0.45) ? "spark.crack" : "spark.open") : "spark.touch",
-        a: strong ? r2(R.range(0.65, 0.85)) : r2(R.range(0.4, 0.55)) });
-      p += R.pick(steps);
+      ev.push({ p: p, stroke: strong ? strongStroke(R) : weakStroke(R),
+                a: strong ? r2(R.range(0.65, 0.85)) : r2(R.range(0.38, 0.55)) });
+      p += Math.max(2, R.pick(steps));
     }
     return ev;
   }
 
   // A short cell restated at a fixed distance — the most motivic grammar.
-  function phraseCell(R, ppc, energy) {
+  function phraseCell(R, C, energy) {
     const len = R.intRange(2, 3 + Math.round(energy * 2));
     const inner = [];
-    for (let i = 0; i < len - 1; i++) inner.push(R.pick([2, 3, 3, 4]));
-    const period = R.pick([9, 12, 15, 18].filter(x => x * 2 <= ppc).concat([12]));
-    const start = R.pick(grid(ppc, 3).slice(0, 4));
+    for (let i = 0; i < len - 1; i++) inner.push(Math.max(2, Math.round(C.step * R.pick([0.5, 1, 1]))));
+    const period = R.pick([PPB, PPB, PPB * 1.5, PPB * 2].map(Math.round))
+                     .valueOf();
+    const start = R.pick(grid(C.ppc, C.step).slice(0, 4));
     const ev = [];
-    for (let rep = 0; start + rep * period < ppc; rep++) {
+    for (let rep = 0; start + rep * period < C.ppc; rep++) {
       let p = start + rep * period;
-      for (let i = 0; i < len && p < ppc; i++) {
+      for (let i = 0; i < len && p < C.ppc; i++) {
         const strong = i === 0;
-        ev.push({ p: p,
-          stroke: strong ? (rep === 0 || R.chance(0.5) ? "spark.crack" : "spark.open")
-                         : "spark.touch",
-          a: strong ? r2(R.range(0.7, 0.9) - rep * 0.04) : r2(R.range(0.4, 0.55)) });
-        p += inner[i] || 3;
+        ev.push({ p: p, stroke: strong ? strongStroke(R) : weakStroke(R),
+                  a: strong ? r2(Math.max(0.5, R.range(0.7, 0.9) - rep * 0.04))
+                            : r2(R.range(0.38, 0.55)) });
+        p += inner[i] || C.step;
       }
     }
     return ev;
   }
 
   // Density gathers, then thins — a phrase with a shape.
-  function phraseArc(R, ppc, energy) {
-    const peak = R.range(0.3, 0.7) * ppc;
+  function phraseArc(R, C, energy) {
+    const peak = R.range(0.3, 0.7) * C.ppc;
     const ev = [];
-    for (let p = 0; p < ppc; p += R.pick([2, 3])) {
-      const near = 1 - Math.abs(p - peak) / (ppc * 0.55);
+    for (let p = 0; p < C.ppc; p += Math.max(2, Math.round(C.step / 2))) {
+      const near = 1 - Math.abs(p - peak) / (C.ppc * 0.55);
       if (near <= 0) continue;
-      if (!R.chance(near * (0.35 + energy * 0.6))) continue;
+      if (!R.chance(near * (0.32 + energy * 0.55))) continue;
       const strong = R.chance(0.3 + near * 0.4);
-      ev.push({ p: p,
-        stroke: strong ? (R.chance(0.5) ? "spark.crack" : "spark.open") : "spark.touch",
-        a: strong ? r2(R.range(0.65, 0.88)) : r2(R.range(0.38, 0.55)) });
+      ev.push({ p: p, stroke: strong ? strongStroke(R) : weakStroke(R),
+                a: strong ? r2(R.range(0.65, 0.88)) : r2(R.range(0.36, 0.55)) });
     }
     return ev;
   }
 
   // A few isolated strong strokes with air around them.
-  function phrasePunctuate(R, ppc, energy) {
+  function phrasePunctuate(R, C, energy) {
     const n = R.intRange(2, 3 + Math.round(energy * 3));
-    const pool = grid(ppc, 3);
-    return R.drawN(pool, p => (p % PPB === 0 ? 0.6 : 1.4), n)
+    return R.drawN(grid(C.ppc, C.step), p => (p % PPB === 0 ? 0.6 : 1.4), n)
       .sort((a, b) => a - b)
-      .map(p => ({ p: p, stroke: R.chance(0.5) ? "spark.open" : "spark.crack",
-                   a: r2(R.range(0.62, 0.9)) }));
+      .map(p => ({ p: p, stroke: strongStroke(R), a: r2(R.range(0.62, 0.9)) }));
   }
 
   const GRAMMARS = [phraseWalk, phraseCell, phraseArc, phrasePunctuate];
 
   // A call declares itself: an even repeated figure, then a landing.
-  function genCall(R, ppc) {
-    const step = R.pick([2, 3, 4, 6]);
-    const start = R.pick([0, 3, 6, 9].filter(x => x < ppc));
+  function genCall(R, C) {
+    const step = Math.max(2, R.pick([C.step / 2, C.step, C.step].map(Math.round)));
+    const start = R.pick(grid(C.ppc, C.step).slice(0, 4));
     const reps = R.intRange(3, 5);
     const ev = [];
     let p = start;
-    for (let i = 0; i < reps && p < ppc; i++) {
+    for (let i = 0; i < reps && p < C.ppc; i++) {
       ev.push({ p: p,
-        stroke: i % 2 === 0 ? "spark.crack" : (step <= 3 ? "spark.touch" : "spark.crack"),
-        a: i % 2 === 0 ? r2(R.range(0.85, 1.0)) : r2(R.range(0.5, 0.65)) });
+                stroke: i % 2 === 0 ? "caller.slap" : (step <= 3 ? "caller.ghost" : "caller.slap"),
+                a: i % 2 === 0 ? r2(R.range(0.85, 1.0)) : r2(R.range(0.5, 0.65)) });
       p += step;
     }
-    const land = Math.min(ppc - 3, p + R.pick([3, 6, 9]));
-    ev.push({ p: land, stroke: "spark.open", a: 0.95, anchor: true });
-    if (R.chance(0.7) && land + 9 < ppc) {
-      ev.push({ p: land + R.pick([6, 9]), stroke: "spark.crack", a: r2(R.range(0.85, 0.95)) });
+    const land = Math.min(C.ppc - 2, p + R.pick([C.step, C.step * 2, C.step * 3]));
+    ev.push({ p: land, stroke: "caller.bass", a: 0.95, anchor: true });
+    if (R.chance(0.65) && land + C.step * 2 < C.ppc) {
+      ev.push({ p: land + C.step * 2, stroke: "caller.slap", a: r2(R.range(0.85, 0.95)) });
     }
     if (ev.length) ev[0].anchor = true;
     return ev;
@@ -565,24 +565,21 @@
   const TIER_IDS = ["seed", "offset", "roll", "rise", "surge"];
   const CALL_IDS = ["callA", "callB", "callC"];
 
-  function genSparkBank(R, C) {
+  function genCallerBank(R, C) {
     const bank = [{ id: "rest", energy: 0, call: false, after: {}, ev: [] }];
-    const nTiers = Math.min(TIER_IDS.length, C.arch.tiers);
+    const nTiers = Math.min(TIER_IDS.length, C.arch_.tiers);
     for (let i = 0; i < nTiers; i++) {
       const energy = r2(0.22 + (i / Math.max(1, nTiers - 1)) * 0.5);
-      const grammar = R.pick(GRAMMARS);
-      let ev = dedupe(grammar(R, C.ppc, energy)).filter(e => e.p < C.ppc);
-      if (!ev.length) ev = dedupe(phrasePunctuate(R, C.ppc, energy));
+      let ev = dedupe(R.pick(GRAMMARS)(R, C, energy)).filter(e => e.p < C.ppc);
+      if (!ev.length) ev = dedupe(phrasePunctuate(R, C, energy));
       if (ev.length) ev[0].a = Math.min(1, r2(ev[0].a + 0.08));
       bank.push({ id: TIER_IDS[i], energy: energy, call: false, after: {}, ev: ev });
     }
-    const nCalls = Math.min(CALL_IDS.length, C.arch.calls);
+    const nCalls = Math.min(CALL_IDS.length, C.arch_.calls);
     for (let i = 0; i < nCalls; i++) {
       bank.push({ id: CALL_IDS[i], energy: r2(0.84 + i * 0.04), call: true, after: {},
-                  ev: dedupe(genCall(R, C.ppc)) });
+                  ev: dedupe(genCall(R, C)) });
     }
-
-    // Phrases follow phrases of nearby energy; calls resolve downward.
     for (const m of bank) {
       for (const n of bank) {
         if (n.id === m.id) continue;
@@ -596,124 +593,159 @@
     return bank;
   }
 
-  /* ---------- variants and answers, derived from each part ---------- */
+  /* ---------- variants and answers ---------- */
 
-  function displaceVariant(R, base, ppc) {
-    return dedupe(base.map(e => (e.anchor || R.chance(0.5))
+  function familyVariant(R, C, line, bells) {
+    // Re-voice the same rhythm through a different contour: the line
+    // moves, the shape of the part stays recognisable.
+    const shape = R.pick(CONTOURS);
+    const levels = contourLevels(R, line.positions.length, shape);
+    const out = { floor: [], column: [], arch: [] };
+    for (let i = 0; i < line.positions.length; i++) {
+      const id = FAM[levels[i]];
+      const onBeat = line.positions[i] % PPB === 0;
+      out[id].push({ p: line.positions[i], stroke: id + ".open",
+                     a: r2(onBeat ? R.range(0.84, 0.96) : R.range(0.6, 0.8)) });
+    }
+    markAnchor(out[FAM[levels[0]]], line.positions[0]);
+    for (const id of FAM) out[id] = dedupe(out[id].concat(bells[id]));
+    if (!FAM.some(id => out[id].some(e => e.anchor))) markAnchor(out.floor, line.positions[0]);
+    return out;
+  }
+
+  function familyResponse(R, C, line, bells) {
+    // The answer closes ranks: the line fills in and drives to the end.
+    const g = grid(C.ppc, C.step);
+    const pos = line.positions.slice();
+    for (const p of R.drawN(g.filter(x => pos.indexOf(x) < 0),
+                            x => (x >= C.ppc * 0.4 ? 1.8 : 0.7), R.intRange(2, 4))) {
+      pos.push(p);
+    }
+    pos.sort((a, b) => a - b);
+    const levels = contourLevels(R, pos.length, R.pick(["rise", "arch", "rock"]));
+    const out = { floor: [], column: [], arch: [] };
+    for (let i = 0; i < pos.length; i++) {
+      const id = FAM[levels[i]];
+      out[id].push({ p: pos[i], stroke: id + ".open", a: r2(R.range(0.72, 0.95)) });
+    }
+    markAnchor(out[FAM[levels[0]]], pos[0]);
+    for (const id of FAM) out[id] = dedupe(out[id].concat(bells[id]));
+    if (!FAM.some(id => out[id].some(e => e.anchor))) markAnchor(out.floor, pos[0]);
+    return out;
+  }
+
+  function driveVariant(R, C, base) {
+    return dedupe(base.map(e => (e.anchor || R.chance(0.6))
       ? e
-      : Object.assign({}, e, { p: (e.p + R.pick([-3, 3, 2]) + ppc) % ppc })));
+      : Object.assign({}, e, {
+          stroke: R.chance(0.5) ? "drive.slap" : e.stroke,
+          a: r2(Math.min(1, e.a + 0.08))
+        })));
   }
 
-  function fillVariant(R, base, fillStroke, ppc) {
-    const ev = base.slice();
-    const used = base.map(e => e.p);
-    const pool = grid(ppc, 3).filter(p => used.indexOf(p) < 0);
-    for (const p of R.drawN(pool, () => 1, R.intRange(1, 3))) {
-      ev.push({ p: p, stroke: fillStroke, a: r2(R.range(0.45, 0.65)) });
-    }
-    return dedupe(ev);
-  }
-
-  function thinVariant(R, base) {
-    const ev = base.filter(e => e.anchor || R.chance(0.6));
-    return ev.length >= 3 ? ev : base;
-  }
-
-  // The answer figure: anchors kept, extra weight late in the cycle.
-  function genResponse(R, base, mainStroke, fillStroke, ppc) {
-    const ev = base.filter(e => e.anchor)
-      .map(e => { const c = Object.assign({}, e); delete c.d; delete c.h; return c; });
-    const used = ev.map(e => e.p);
-    const pool = grid(ppc, 3).filter(p => used.indexOf(p) < 0);
-    for (const p of R.drawN(pool, p => (p >= ppc * 0.4 ? 1.8 : 0.7), R.intRange(3, 5))) {
-      ev.push({ p: p, stroke: R.chance(0.6) ? mainStroke : fillStroke,
-                a: r2(R.range(0.6, 0.85)) });
-    }
-    return dedupe(ev);
+  function driveResponse(R, C, base) {
+    return dedupe(base.map(e => {
+      const c = Object.assign({}, e);
+      if (!c.anchor && c.stroke === "drive.ghost" && R.chance(0.6)) c.stroke = "drive.tone";
+      if (!c.anchor && c.stroke === "drive.tone" && R.chance(0.45)) c.stroke = "drive.slap";
+      delete c.d; delete c.h;
+      c.a = r2(Math.min(1, c.a + 0.08));
+      return c;
+    }));
   }
 
   /* ---------- the whole groove ---------- */
 
   function build(seed) {
     const R = new Rng(seed);
+    const meter = R.weighted(["ternary", "binary"], [1.15, 1]);
+    const step = meter === "ternary" ? 4 : 3;
     const ppc = R.weighted([36, 48, 60, 72], [1.0, 3.0, 0.85, 0.6]);
-    const arch = R.pick(ARCHETYPES);
-    const feel = genFeel(R);
-    const key = genKey(R, ppc);
-    const C = { ppc: ppc, beats: ppc / PPB, arch: arch, keyPos: key.pos };
+    const arch_ = R.pick(ARCHETYPES);
+    const feel = genFeel(R, meter);
+    const tune = genTuning(R);
 
-    const keel = genKeel(R, key);
-    const rootGen = genRoot(R, C);
-    C.rootAnchors = rootGen.anchors;
-    const weaveGen = genWeave(R, C);
-    const grainGen = genGrain(R, C);
-    const haloGen = genHalo(R, C);
+    const spine = genSpine(R, ppc, step);
+    const C = { ppc: ppc, beats: ppc / PPB, step: step, meter: meter,
+                arch_: arch_, spinePos: spine.pos };
 
-    const root = rootGen.part;
-    root.variants = [displaceVariant(R, root.base, ppc),
-                     fillVariant(R, root.base, "root.press", ppc)];
-    root.response = genResponse(R, root.base, "root.open", "root.press", ppc);
+    const line = genFamilyLine(R, C);
+    const bellStyle = R.pick(arch_.bells);
+    const bells = genBells(R, C, bellStyle);
 
-    const weave = weaveGen.part;
-    weave.variants = [displaceVariant(R, weave.base, ppc), thinVariant(R, weave.base)];
-    weave.response = genResponse(R, weave.base, "weave.snap", "weave.tone", ppc);
+    const famBase = {};
+    for (const id of FAM) famBase[id] = dedupe(line.parts[id].concat(bells[id]));
 
-    const halo = haloGen.part;
-    halo.variants = [thinVariant(R, halo.base)];
+    const drive = genDrive(R, C);
+    drive.part.variants = [driveVariant(R, C, drive.part.base)];
+    drive.part.response = driveResponse(R, C, drive.part.base);
 
-    // Everyone lands on the key figure together for the break.
-    const unison = key.pos.slice(0, Math.max(4, Math.min(6, key.pos.length - 1)));
+    // Everyone lands on the timeline together for the break.
+    const unison = spine.pos.slice(0, Math.max(4, Math.min(6, spine.pos.length - 1)));
     const breakFigure = {
-      keel:  unison.map(p => ({ p: p, stroke: "keel.tick", a: 1, anchor: true })),
-      root:  unison.map(p => ({ p: p, stroke: "root.open", a: 1, anchor: true })),
-      weave: unison.map(p => ({ p: p, stroke: "weave.snap", a: 1, anchor: true })),
-      spark: unison.map(p => ({ p: p, stroke: "spark.crack", a: 1, anchor: true })),
-      grain: unison.map(p => ({ p: p, stroke: "grain.push", a: 0.9, anchor: true })),
-      halo:  [{ p: unison[unison.length - 1], stroke: "halo.ring", a: 0.9, anchor: true }]
+      spine:  unison.map(p => ({ p: p, stroke: "spine.high",  a: 1, anchor: true })),
+      floor:  unison.map(p => ({ p: p, stroke: "floor.open",  a: 1, anchor: true })),
+      column: unison.map(p => ({ p: p, stroke: "column.open", a: 1, anchor: true })),
+      arch:   unison.map(p => ({ p: p, stroke: "arch.open",   a: 1, anchor: true })),
+      drive:  unison.map(p => ({ p: p, stroke: "drive.slap",  a: 1, anchor: true })),
+      caller: unison.map(p => ({ p: p, stroke: "caller.slap", a: 1, anchor: true }))
     };
 
     return {
       seed: String(seed),
       name: G.nameFor(seed),
       ppc: ppc,
+      meter: meter,
+      step: step,
+      tuning: tune.tuning,
       feel: feel,
-      keel: keel,
-      root: root,
-      weave: weave,
-      grain: grainGen.part,
-      halo: halo,
-      sparkMotifs: genSparkBank(R, C),
+      spine: spine.part,
+      family: {
+        base: famBase,
+        variants: [familyVariant(R, C, line, bells)],
+        response: familyResponse(R, C, line, bells)
+      },
+      drive: drive.part,
+      callerMotifs: genCallerBank(R, C),
       breakFigure: breakFigure,
       meta: {
         beats: C.beats,
-        key: key.mode === "pulse" ? "pulse /" + key.iv[0] : key.iv.join("·"),
+        meter: meter,
+        key: spine.key,
         feel: feel.id,
-        archetype: arch.id,
-        low: rootGen.style,
-        mid: weaveGen.style,
-        grain: grainGen.style,
-        color: haloGen.style,
-        grainLock: grainGen.lockKey ? "key" : "beat",
-        rootAnchors: rootGen.anchors.length
+        archetype: arch_.id,
+        tuning: tune.id,
+        contour: line.contour,
+        bells: bellStyle,
+        engine: drive.style + " / " + drive.cellBeats + "-beat cell"
       }
     };
   }
 
   // A groove has to be playable, not merely well-formed.
   function usable(set) {
-    if (!set.keel.base.length || !set.root.base.length || !set.weave.base.length) return false;
-    if (set.root.base.filter(e => e.anchor).length < 2) return false;
-    if (!set.weave.base.some(e => e.anchor)) return false;
-    if (set.sparkMotifs.filter(m => m.call).length < 2) return false;
-    if (set.sparkMotifs.filter(m => m.ev.length >= 3).length < 2) return false;
-    const total = set.keel.base.length + set.root.base.length + set.weave.base.length +
-                  set.grain.base.length + set.halo.base.length;
-    if (total < 14) return false;                    // too thin to be a groove
-    if (total > 130) return false;                   // too dense to breathe
-    for (const part of [set.keel, set.root, set.weave, set.grain, set.halo]) {
-      if (part.base.some(e => e.p < 0 || e.p >= set.ppc)) return false;
+    if (!set.spine.base.length || !set.drive.base.length) return false;
+    if (set.spine.base.length < 3) return false;
+    const fam = set.family.base;
+    const opens = FAM.reduce((n, id) =>
+      n + fam[id].filter(e => e.stroke === id + ".open").length, 0);
+    if (opens < 5) return false;                       // the melody needs notes
+    const voiced = FAM.filter(id => fam[id].some(e => e.stroke === id + ".open")).length;
+    if (voiced < 2) return false;                      // at least two drums must speak
+    if (!FAM.some(id => fam[id].some(e => e.anchor))) return false;
+    if (!set.drive.base.some(e => e.anchor)) return false;
+    if (set.callerMotifs.filter(m => m.call).length < 2) return false;
+    if (set.callerMotifs.filter(m => m.ev.length >= 3).length < 2) return false;
+
+    let total = set.spine.base.length + set.drive.base.length;
+    for (const id of FAM) total += fam[id].length;
+    if (total < 18 || total > 150) return false;
+
+    const parts = [set.spine.base, set.drive.base, fam.floor, fam.column, fam.arch];
+    for (const part of parts) {
+      if (part.some(e => e.p < 0 || e.p >= set.ppc)) return false;
     }
-    for (const m of set.sparkMotifs) {
+    for (const m of set.callerMotifs) {
       if (m.ev.some(e => e.p < 0 || e.p >= set.ppc)) return false;
     }
     return true;
@@ -721,7 +753,7 @@
 
   G.generate = function (seed) {
     const s = seed || G.newSeed();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 14; i++) {
       const set = build(i === 0 ? s : s + "/" + i);
       if (usable(set)) { set.seed = String(s); set.name = G.nameFor(s); return set; }
     }

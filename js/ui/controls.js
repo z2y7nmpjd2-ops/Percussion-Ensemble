@@ -6,12 +6,18 @@
   "use strict";
 
   const KEYMAP = {
-    q: ["spark", "spark.open"], w: ["spark", "spark.crack"], e: ["spark", "spark.touch"],
-    a: ["weave", "weave.tone"], s: ["weave", "weave.snap"], d: ["weave", "weave.touch"],
-    z: ["root", "root.open"],  x: ["root", "root.press"],
-    t: ["keel", "keel.tick"],  y: ["keel", "keel.tock"],
-    g: ["grain", "grain.push"], h: ["grain", "grain.pull"],
-    b: ["halo", "halo.ring"],  n: ["halo", "halo.damp"]
+    // Caller — the lead hand drum
+    q: ["caller", "caller.bass"], w: ["caller", "caller.tone"],
+    e: ["caller", "caller.slap"], r: ["caller", "caller.ghost"],
+    // Drive — the engine
+    a: ["drive", "drive.bass"],  s: ["drive", "drive.tone"],
+    d: ["drive", "drive.slap"],  f: ["drive", "drive.ghost"],
+    // The family: open / muted / striker, low to high
+    z: ["floor", "floor.open"],   x: ["floor", "floor.mute"],   c: ["floor", "floor.bell"],
+    v: ["column", "column.open"], b: ["column", "column.mute"], n: ["column", "column.bell"],
+    g: ["arch", "arch.open"],     h: ["arch", "arch.mute"],     j: ["arch", "arch.bell"],
+    // Spine — the timeline
+    t: ["spine", "spine.high"],  y: ["spine", "spine.low"]
   };
 
   const MACROS = ["heat", "density", "lilt", "spread", "loose"];
