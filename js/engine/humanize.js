@@ -54,10 +54,14 @@
   };
 
   // Full offset for one stroke of one player.
-  H.offset = function (playerId, pulseInCycle, absTime, ctl, pulseDur, lean16) {
+  H.offset = function (playerId, pulseInCycle, absTime, ctl, pulseDur, feel) {
     const p = H.profiles[playerId] || H.profiles.weave;
-    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur, lean16);
-    off += (p.lean / 1000) * ctl.spread * 2;                 // personal lean
+    // A groove may nudge a player's personal lean, so the same figures
+    // sit differently against each other from one groove to the next.
+    const ov = feel && feel.profiles && feel.profiles[playerId];
+    const lean = (ov && typeof ov.lean === "number") ? ov.lean : p.lean;
+    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur, feel && feel.lean);
+    off += (lean / 1000) * ctl.spread * 2;                   // personal lean
     off += (p.driftAmt / 1000) * ctl.spread *
            Math.sin(absTime * p.driftRate * 2 * Math.PI);    // slow wander
     off += (p.jitter / 1000) * (0.25 + ctl.loose * 1.5) * H.gauss(); // per-stroke jitter

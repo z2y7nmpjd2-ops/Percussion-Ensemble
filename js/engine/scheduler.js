@@ -7,12 +7,13 @@
 (function () {
   "use strict";
 
-  const PPC = 48;       // pulses per cycle
-  const PPB = 12;       // pulses per beat (beat = quarter note)
+  const PPC = 48;       // default pulses per cycle
+  const PPB = 12;       // pulses per beat (beat = quarter note) — always 12
 
   function Scheduler(ctx) {
     this.ctx = ctx;
     this.bpm = 96;
+    this.ppc = PPC;     // set per groove; a cycle may be 3–6 beats long
     this.running = false;
     this.pulse = 0;          // 0..47 within the cycle
     this.cycle = 0;
@@ -39,7 +40,7 @@
         if (this.onPulse) this.onPulse(this.pulse, this.cycle, this.nextTime);
         this.nextTime += this.pulseDur();
         this.pulse++;
-        if (this.pulse >= PPC) { this.pulse = 0; this.cycle++; }
+        if (this.pulse >= this.ppc) { this.pulse = 0; this.cycle++; }
       }
     };
     this.interval = setInterval(tick, 25);
@@ -61,7 +62,7 @@
     if (!this.running) return 0;
     const dur = this.pulseDur();
     const pulsesAhead = (this.nextTime - t) / dur;
-    let pos = (this.pulse - pulsesAhead) / PPC;
+    let pos = (this.pulse - pulsesAhead) / this.ppc;
     pos = pos - Math.floor(pos);
     return pos;
   };

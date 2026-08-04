@@ -8,7 +8,6 @@
   "use strict";
 
   const L = window.LATTICE;
-  const PPC = 48;
 
   const PLAYERS = [
     { id: "keel",  label: "Keel",  desc: "guide line",   pan: -0.15, level: 0.75, color: "#e0a458" },
@@ -64,6 +63,7 @@
     }
 
     const Pt = this.pat, ctl = this.ctl;
+    this.sched.ppc = Pt.ppc || 48;   // a groove carries its own cycle length
 
     // Lift / Simmer ramps move heat a step per cycle toward their target.
     if (this.heatRamp !== 0) {
@@ -118,7 +118,7 @@
       if (ev.length && Math.random() < mutP) {
         const keys = Object.keys(L.Patterns.transforms);
         const t = keys[Math.floor(Math.random() * keys.length)];
-        ev = L.Patterns.transforms[t](ev);
+        ev = L.Patterns.transforms[t](ev, Pt.ppc);
       }
       plan.spark = toMap(ev);
       if (motif.call && !this.manualLead) this.respondCycle = cycle + 1;
@@ -200,8 +200,7 @@
         if (this.responseNow && (p.id === "grain" || p.id === "halo")) a = Math.min(1, a * 1.25);
 
         const vel = H.velocity(a, pulse, ctl);
-        const lean = this.pat.feel && this.pat.feel.lean;
-        const off = H.offset(p.id, pulse, when, ctl, pulseDur, lean);
+        const off = H.offset(p.id, pulse, when, ctl, pulseDur, this.pat.feel);
         const t = Math.max(this.ctx.currentTime + 0.002, when + off);
 
         L.Voices.play(this.ctx, this.mixer.buses[p.id].gain, art.stroke, t, vel);
@@ -260,7 +259,7 @@
     const vel = Math.max(0.05, Math.min(1, accent * (0.92 + Math.random() * 0.16)));
     const t = this.ctx.currentTime + 0.003;
     L.Voices.play(this.ctx, this.mixer.buses[playerId].gain, stroke, t, vel);
-    const pos = Math.floor(this.sched.position(this.ctx.currentTime) * PPC);
+    const pos = Math.floor(this.sched.position(this.ctx.currentTime) * this.sched.ppc);
     this.lastHits.push({ player: playerId, pulse: pos, time: t, a: vel });
   };
 

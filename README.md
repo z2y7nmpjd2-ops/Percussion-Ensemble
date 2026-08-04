@@ -27,19 +27,20 @@ npx serve .        # or: python3 -m http.server
 
 | Voice | Role | Character |
 |-------|------|-----------|
-| **Keel** | guide line | A dry two-pitch woodblock tick tracing an uneven 9-9-6-9-9-6 key. Never varies — it is the reference everyone leans on. |
-| **Root** | low anchor | Round swept-sine low drum, open and pressed strokes. Speaks in the Keel's gaps and lays back behind the beat. |
-| **Weave** | mid voice | Woodier mid drum living on offbeat 16ths; stitches sextuplet pairs at higher density. Trades variation turns with the lead. |
+| **Keel** | guide line | A dry two-pitch woodblock tick tracing the groove's key figure. Never varies — it is the reference everyone leans on. |
+| **Root** | low anchor | Round swept-sine low drum, open and pressed strokes. Guards the ground and lays back behind the beat. |
+| **Weave** | mid voice | Woodier mid drum living off the beat, interlocking against the low anchor; stitches sextuplet pairs at higher density. Trades variation turns with the lead. |
 | **Spark** | lead voice | The fastest-speaking drum. Walks a motif graph, mutates its phrases, and issues calls the ensemble answers. |
 | **Grain** | texture | A shaker with alternating push/pull strokes; thickens from 8ths to 16ths to sextuplet infill as density and heat rise. |
-| **Halo** | color | Sparse, quickly-damped inharmonic metal at the cycle's turning points. |
+| **Halo** | color | Sparse, quickly-damped inharmonic metal marking the cycle's turning points. |
 
 ## The grid
 
-One cycle is **48 pulses** (4 beats × 12). That single grid holds duple 16ths
-(every 3 pulses), sextuplets (every 2) and triplet 8ths (every 4) simultaneously,
-so parts genuinely cross-group against each other rather than sharing one
-subdivision.
+A beat is always **12 pulses**, which holds duple 16ths (every 3 pulses),
+sextuplets (every 2) and triplet 8ths (every 4) simultaneously, so parts
+genuinely cross-group against each other rather than sharing one subdivision.
+A cycle is 3–6 beats long depending on the groove; the hand-written one is
+4 beats (48 pulses).
 
 ## What makes it feel played, not programmed
 
@@ -74,22 +75,40 @@ from a fresh seed — a new key figure for the guide line, new placements for ev
 part, a new motif bank for the lead, and a new feel for the grid itself.
 
 Generation is constrained rather than random, so the interlock survives every
-re-roll:
+re-roll. What varies:
 
-- The **key figure** is an uneven partition of 48 into 5–7 spans. Even partitions
-  are rejected — they would give the ensemble nothing to lean on — as are figures
-  that never cut across the beat.
-- The **low anchor** places its anchors only in the guide line's gaps.
-- The **mid voice** then avoids the low anchor's positions, favoring offbeats.
-- The **texture** picks a base subdivision and decides whether its accents follow
-  the beat or lock to the key figure.
-- The **lead's** bank is grown phrase by phrase across energy tiers, with two
-  calls and a transition graph that settles after each one.
-- The **feel** — the lilt curve the whole grid leans on — is drawn from five
-  archetypes (even, rolling, leaning, pushed, dragged) and jittered.
+- **Cycle length** — 3, 4, 5 or 6 beats (36, 48, 60 or 72 pulses). The beat is
+  always 12 pulses, so every cycle keeps the same subdivisional density.
+- **Archetype** — a whole-ensemble disposition (*open*, *driving*, *talking*,
+  *deep*, *shimmer*) that decides how many anchors the low voice guards, how busy
+  the middle is, what the texture may do, and how large the lead's vocabulary gets.
+- **The guide line** — either an uneven key figure (a partition of the cycle whose
+  spans differ, optionally rotated so it doesn't begin on the downbeat) or a
+  steady pulse carrying a cross-cutting accent pattern. Even partitions are
+  rejected, as are figures that never cut across the beat.
+- **The low voice** picks a strategy: anchoring in the guide line's *gaps*,
+  *lock*ing one anchor onto a guide stroke, walking a two-tone *line*, or
+  treading a regular *pedal* that may cut across the beat.
+- **The mid voice** then avoids the low anchors and either *punctuate*s sparsely,
+  *ride*s a running subdivision snapped at a cross-period, or *answer*s within one
+  half of the cycle, leaving the other half open for the lead.
+- **The texture** runs *continuous*, *gapped* (resting whole beats), *pulsed*
+  (dense on chosen beats only), *sparse*, or *shimmer* (sextuplet grid), with
+  accents following either the beat or the key figure.
+- **The color voice** marks the cycle's *turns*, repeats a small *figure*, or
+  gathers in the *tail*.
+- **The lead's** bank is grown across energy tiers using one of four phrase
+  grammars — a stepping *walk*, a restated *cell*, a density *arc*, or isolated
+  *punctuation* — plus two or three calls and a transition graph that settles
+  after each one.
+- **The feel** — the lilt curve the whole grid leans on — is drawn from seven
+  archetypes and jittered, and each groove also nudges individual players' timing
+  personalities, so two grooves with similar figures still sit differently.
 
-Every groove is then checked for playability before it reaches your ears; a
-groove that fails re-rolls automatically.
+Every groove is then checked for playability before it reaches your ears — enough
+anchors to hold, no part too thin or too dense to breathe, no stroke outside the
+cycle — and a groove that fails re-rolls automatically. Across 600 sampled seeds,
+every groove was structurally unique.
 
 Seeds are the whole story: **the same seed always grows the same groove**, so
 typing `copper` into the seed box gives you the same weave on any machine. Share
@@ -156,7 +175,8 @@ js/audio/voices.js     14 stroke synthesizers (dry, soft-attack house style)
 js/audio/mixer.js      per-player buses → glue → tone → compressor → master
 js/engine/humanize.js  lilt, spread profiles, jitter/drift, velocity life
 js/engine/patterns.js  48-pulse house groove, motif graph, transforms
-js/engine/generator.js seeded groove generation under musical constraints
+js/engine/generator.js seeded groove generation: archetypes, part strategies,
+                       phrase grammars, playability checks
 js/engine/scheduler.js lookahead clock (25 ms timer, 140 ms horizon)
 js/engine/ensemble.js  per-cycle planning: turns, calls, cues, groove swaps
 js/ui/visual.js        concentric-ring score with real (humanized) hit flares

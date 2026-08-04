@@ -6,7 +6,6 @@
 (function () {
   "use strict";
 
-  const PPC = 48;
 
   function Visual(canvas, ensemble, sched, ctx) {
     this.cv = canvas;
@@ -38,14 +37,16 @@
     const rMin = rMax * 0.3;
     const now = this.actx.currentTime;
     const pos = this.sched.position(now); // 0..1 around the circle
+    const ppc = (this.ens.pat && this.ens.pat.ppc) || 48;
+    const ticks = ppc / 3;                // one spoke per sixteenth
 
     g.clearRect(0, 0, W, H);
 
-    // faint beat spokes (4 beats) and 16th ticks
+    // faint sixteenth ticks, emphasized once per beat
     g.save();
     g.translate(cx, cy);
-    for (let s = 0; s < 16; s++) {
-      const a = (s / 16) * Math.PI * 2 - Math.PI / 2;
+    for (let s = 0; s < ticks; s++) {
+      const a = (s / ticks) * Math.PI * 2 - Math.PI / 2;
       const major = s % 4 === 0;
       g.strokeStyle = major ? "rgba(232,230,223,0.16)" : "rgba(232,230,223,0.05)";
       g.lineWidth = major ? 1.5 : 1;
@@ -68,7 +69,7 @@
       if (!plan) return;
       const dim = p.muted ? 0.18 : 1;
       plan.forEach((evs, pulse) => {
-        const a = (pulse / PPC) * Math.PI * 2 - Math.PI / 2;
+        const a = (pulse / ppc) * Math.PI * 2 - Math.PI / 2;
         const acc = Math.max.apply(null, evs.map(e => e.accent));
         const rad = 2 + acc * 4.5;
         g.fillStyle = hexA(p.color, (0.35 + acc * 0.55) * dim);
@@ -79,7 +80,7 @@
     });
 
     // recent hit flares, where the humanized stroke actually landed
-    const cycleDur = this.sched.pulseDur() * PPC;
+    const cycleDur = this.sched.pulseDur() * ppc;
     for (const h of this.ens.lastHits) {
       const age = now - h.time;
       if (age < 0 || age > 0.3) continue;

@@ -238,26 +238,29 @@
   /* Motif transforms — small mutations so no phrase returns identical. */
   P.transforms = {
     // shift the whole phrase 3 pulses later (a 16th displacement)
-    displace: function (ev) {
-      return ev.map(e => Object.assign({}, e, { p: (e.p + 3) % P.PPC }));
+    displace: function (ev, ppc) {
+      const N = ppc || P.PPC;
+      return ev.map(e => Object.assign({}, e, { p: (e.p + 3) % N }));
     },
     // add a soft pickup 2 pulses before the first stroke
-    pickup: function (ev) {
+    pickup: function (ev, ppc) {
       if (!ev.length) return ev;
+      const N = ppc || P.PPC;
       const first = ev[0];
-      const pre = { p: (first.p + P.PPC - 2) % P.PPC, stroke: "spark.touch", a: first.a * 0.5 };
+      const pre = { p: (first.p + N - 2) % N, stroke: "spark.touch", a: first.a * 0.5 };
       return [pre].concat(ev);
     },
     // double one mid-phrase stroke at sextuplet distance
-    stutter: function (ev) {
+    stutter: function (ev, ppc) {
       if (ev.length < 2) return ev;
+      const N = ppc || P.PPC;
       const i = 1 + Math.floor(Math.random() * (ev.length - 1));
       const e = ev[i];
-      const echo = { p: (e.p + 2) % P.PPC, stroke: "spark.touch", a: e.a * 0.65 };
+      const echo = { p: (e.p + 2) % N, stroke: "spark.touch", a: e.a * 0.65 };
       return ev.slice(0, i + 1).concat([echo], ev.slice(i + 1));
     },
     // thin the phrase: drop non-anchor strokes with 40% chance
-    thin: function (ev) {
+    thin: function (ev, ppc) {
       return ev.filter(e => e.anchor || Math.random() > 0.4);
     }
   };
@@ -279,6 +282,7 @@
     return {
       seed: "HOUSE",
       name: "House Weave",
+      ppc: 48,
       feel: { id: "rolling", lean: [0, 0.42, -0.08, 0.3] },
       keel:  { base: P.keel.base,  variants: [] },
       root:  { base: P.root.base,  variants: P.root.variants,  response: P.root.response },
@@ -288,12 +292,15 @@
       sparkMotifs: P.sparkMotifs,
       breakFigure: P.breakFigure,
       meta: {
+        beats: 4,
         key: "9·9·6·9·9·6",
         feel: "rolling",
-        grain: "sixteenths",
+        archetype: "house",
+        low: "gaps",
+        mid: "punctuate",
+        grain: "continuous",
         grainLock: "beat",
-        rootAnchors: 3,
-        weaveVoices: P.weave.base.length
+        rootAnchors: 3
       }
     };
   };
