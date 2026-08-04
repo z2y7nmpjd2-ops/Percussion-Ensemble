@@ -14,17 +14,20 @@
     b: ["halo", "halo.ring"],  n: ["halo", "halo.damp"]
   };
 
+  const MACROS = ["heat", "density", "lilt", "spread", "loose"];
+
+  function $(id) { return document.getElementById(id); }
+
   function Controls(ensemble, mixer, sched) {
     this.ens = ensemble;
     this.mixer = mixer;
     this.sched = sched;
+    this.strips = {};
     this.bindMacros();
     this.bindCues();
     this.buildPlayerStrips();
     this.bindKeyboard();
   }
-
-  function $(id) { return document.getElementById(id); }
 
   function slider(id, onChange) {
     const el = $(id), val = $(id + "-val");
@@ -44,16 +47,13 @@
     slider("master", v => mixer.setMaster(v / 100));
     slider("tone",   v => mixer.setTone(v / 100));
 
-    this.heatEl = slider("heat", v => ens.setControl("heat", v / 100));
-    slider("density", v => ens.setControl("density", v / 100));
-    slider("lilt",    v => ens.setControl("lilt", v / 100));
-    slider("spread",  v => ens.setControl("spread", v / 100));
-    slider("loose",   v => ens.setControl("loose", v / 100));
+    MACROS.forEach(name => slider(name, v => ens.setControl(name, v / 100)));
 
     // Lift/Simmer move heat internally; reflect it back onto the slider.
     ens.onHeatChange = (h) => {
-      this.heatEl.value = Math.round(h * 100);
-      $("heat-val").textContent = this.heatEl.value;
+      const el = $("heat");
+      el.value = Math.round(h * 100);
+      $("heat-val").textContent = el.value;
     };
   };
 
@@ -91,34 +91,52 @@
       host.appendChild(row);
 
       const muteBtn = row.querySelector(".mute");
+      const lvl = row.querySelector(".lvl");
+      const vry = row.querySelector(".vry");
+      this.strips[p.id] = { muteBtn: muteBtn, lvl: lvl, vry: vry };
+
       muteBtn.addEventListener("click", () => {
         p.muted = !p.muted;
         this.mixer.setMute(p.id, p.muted);
         muteBtn.classList.toggle("on", p.muted);
       });
-      row.querySelector(".lvl").addEventListener("input", (e) => {
-        this.mixer.setLevel(p.id, e.target.value / 100);
-      });
-      row.querySelector(".vry").addEventListener("input", (e) => {
-        p.vary = e.target.value / 100;
-      });
+      lvl.addEventListener("input", (e) => this.mixer.setLevel(p.id, e.target.value / 100));
+      vry.addEventListener("input", (e) => { p.vary = e.target.value / 100; });
     }
   };
 
   Controls.prototype.bindKeyboard = function () {
-    const down = new Set();
     window.addEventListener("keydown", (e) => {
-      if (e.repeat) return;
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
       const m = KEYMAP[e.key.toLowerCase()];
       if (!m) return;
-      down.add(e.key.toLowerCase());
-      const accent = e.shiftKey ? 1.0 : 0.65;
-      this.ens.manual(m[0], m[1], accent);
+      this.ens.manual(m[0], m[1], e.shiftKey ? 1.0 : 0.65);
       e.preventDefault();
     });
-    window.addEventListener("keyup", (e) => down.delete(e.key.toLowerCase()));
+  };
+
+  /* Pull every control back into line with the engine — used after a
+   * saved groove is loaded and brings its own settings with it. */
+  Controls.prototype.refresh = function () {
+    const set = (id, v) => {
+      const el = $(id);
+      if (!el) return;
+      el.value = Math.round(v);
+      const lab = $(id + "-val");
+      if (lab) lab.textContent = el.value;
+    };
+    set("tempo", this.sched.bpm);
+    MACROS.forEach(name => set(name, this.ens.ctl[name] * 100));
+
+    for (const p of this.ens.players) {
+      const s = this.strips[p.id];
+      if (!s) continue;
+      s.lvl.value = Math.round(this.mixer.buses[p.id].level * 100);
+      s.vry.value = Math.round(p.vary * 100);
+      s.muteBtn.classList.toggle("on", p.muted);
+    }
   };
 
   window.LATTICE = window.LATTICE || {};

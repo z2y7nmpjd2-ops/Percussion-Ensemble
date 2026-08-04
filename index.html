@@ -81,6 +81,32 @@
     <div id="players"></div>
   </section>
 
+  <section id="groove-panel">
+    <h2>Groove</h2>
+    <div class="groove-head">
+      <div class="groove-id">
+        <div class="groove-name" id="groove-name">House Weave</div>
+        <div class="groove-chips" id="groove-chips"></div>
+      </div>
+      <div class="groove-buttons">
+        <button id="btn-regen" class="primary">Roll a new groove</button>
+        <button id="btn-save">Save this groove</button>
+        <button id="btn-house">House groove</button>
+      </div>
+    </div>
+    <div class="seed-row">
+      <label for="seed-input">Seed</label>
+      <input type="text" id="seed-input" placeholder="type any word or code" maxlength="16" spellcheck="false">
+      <button id="btn-seed">Grow it</button>
+      <span class="hint">The same seed always grows the same groove &mdash; share the code, share the weave.</span>
+    </div>
+    <div class="saved-head">
+      <h3>Saved grooves</h3>
+      <span id="saved-note" class="hint"></span>
+    </div>
+    <div id="saved-list"></div>
+  </section>
+
   <section id="playing">
     <h2>Play along</h2>
     <p>Click Start, then use your keyboard. Hold <b>Shift</b> for accented strokes.</p>
@@ -103,10 +129,12 @@
 <script src="js/audio/mixer.js"></script>
 <script src="js/engine/humanize.js"></script>
 <script src="js/engine/patterns.js"></script>
+<script src="js/engine/generator.js"></script>
 <script src="js/engine/scheduler.js"></script>
 <script src="js/engine/ensemble.js"></script>
 <script src="js/ui/visual.js"></script>
 <script src="js/ui/controls.js"></script>
+<script src="js/ui/grooves.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

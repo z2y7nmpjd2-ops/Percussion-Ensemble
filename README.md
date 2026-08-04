@@ -66,6 +66,47 @@ subdivision.
   (displacement, pickups, sextuplet stutters, thinning) so nothing returns
   identical.
 
+## Rolling new grooves
+
+The per-cycle intelligence varies *how* a groove is played; the **Groove** panel
+changes *what* the groove is. **Roll a new groove** grows an entirely new weave
+from a fresh seed — a new key figure for the guide line, new placements for every
+part, a new motif bank for the lead, and a new feel for the grid itself.
+
+Generation is constrained rather than random, so the interlock survives every
+re-roll:
+
+- The **key figure** is an uneven partition of 48 into 5–7 spans. Even partitions
+  are rejected — they would give the ensemble nothing to lean on — as are figures
+  that never cut across the beat.
+- The **low anchor** places its anchors only in the guide line's gaps.
+- The **mid voice** then avoids the low anchor's positions, favoring offbeats.
+- The **texture** picks a base subdivision and decides whether its accents follow
+  the beat or lock to the key figure.
+- The **lead's** bank is grown phrase by phrase across energy tiers, with two
+  calls and a transition graph that settles after each one.
+- The **feel** — the lilt curve the whole grid leans on — is drawn from five
+  archetypes (even, rolling, leaning, pushed, dragged) and jittered.
+
+Every groove is then checked for playability before it reaches your ears; a
+groove that fails re-rolls automatically.
+
+Seeds are the whole story: **the same seed always grows the same groove**, so
+typing `copper` into the seed box gives you the same weave on any machine. Share
+the code, share the groove. A new groove queued while the ensemble is playing
+lands on the next cycle line, never mid-phrase.
+
+## Saving generations
+
+**Save this groove** keeps the one you're hearing, along with the settings you
+were playing it with — tempo, all five macros, tone, and each player's level,
+vary and mute state. Saved grooves live in your browser's local storage and
+survive reloads; rename one by typing over its name, bring it back with **Load**,
+or **Delete** it. **House groove** returns to the hand-written original.
+
+Saves store the complete pattern set, not just the seed, so a saved groove comes
+back exactly as it left even if the generator changes later.
+
 ## Conducting
 
 | Control | Effect |
@@ -95,11 +136,15 @@ Power users: everything is scriptable from the console via `LATTICE.app`, e.g.
 
 ## Customizing
 
-- `js/engine/patterns.js` — every part, variant, response figure, lead motif and
-  transform. Events are `{p, stroke, a}` plus optional `anchor`, `soft`
-  (quiet substitute), `d` (density gate) and `h` (heat gate).
+- `js/engine/patterns.js` — the hand-written groove: every part, variant,
+  response figure, lead motif and transform. Events are `{p, stroke, a}` plus
+  optional `anchor`, `soft` (quiet substitute), `d` (density gate) and `h`
+  (heat gate). `P.houseSet()` packages it in the same shape the generator emits.
+- `js/engine/generator.js` — the constraints that grow a groove from a seed:
+  the key-figure partition, per-part placement rules, the motif grammar, the
+  feel archetypes, and the playability check every groove must pass.
 - `js/engine/humanize.js` — per-player timing personalities (`H.profiles`) and
-  the lilt curve (`LEAN_16`).
+  the default lilt curve (`LEAN_16`), which each groove's own feel overrides.
 - `js/audio/voices.js` — the synthesis recipes for all fourteen strokes.
 
 ## Architecture
@@ -110,10 +155,12 @@ css/style.css
 js/audio/voices.js     14 stroke synthesizers (dry, soft-attack house style)
 js/audio/mixer.js      per-player buses → glue → tone → compressor → master
 js/engine/humanize.js  lilt, spread profiles, jitter/drift, velocity life
-js/engine/patterns.js  48-pulse pattern library, motif graph, transforms
+js/engine/patterns.js  48-pulse house groove, motif graph, transforms
+js/engine/generator.js seeded groove generation under musical constraints
 js/engine/scheduler.js lookahead clock (25 ms timer, 140 ms horizon)
-js/engine/ensemble.js  per-cycle planning: turns, calls, cues, gating
+js/engine/ensemble.js  per-cycle planning: turns, calls, cues, groove swaps
 js/ui/visual.js        concentric-ring score with real (humanized) hit flares
 js/ui/controls.js      sliders, cues, player strips, keyboard play
-js/main.js             boot on first gesture
+js/ui/grooves.js       roll / seed / save / load / delete the groove library
+js/main.js             builds the instrument at load; Start resumes audio
 ```

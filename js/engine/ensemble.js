@@ -29,6 +29,10 @@
     // conductor controls (0..1)
     this.ctl = { heat: 0.35, density: 0.5, lilt: 0.4, spread: 0.6, loose: 0.45 };
 
+    // the groove currently being played; swaps are deferred to a cycle line
+    this.pat = L.Patterns.houseSet();
+    this.pendingPat = null;
+
     // conversation state
     this.turn = "spark";        // who holds variation privilege
     this.motifId = "seed";      // spark's current phrase
@@ -43,12 +47,23 @@
 
     sched.onCycle = (cycle, when) => this.planCycle(cycle);
     sched.onPulse = (pulse, cycle, when) => this.renderPulse(pulse, when);
+
+    this.planCycle(0);   // so the ring shows the weave before playback starts
   }
 
   /* ---------- planning: once per cycle ---------- */
 
   Ensemble.prototype.planCycle = function (cycle) {
-    const Pt = L.Patterns, ctl = this.ctl;
+    // A new groove always takes over on a cycle line, never mid-phrase.
+    if (this.pendingPat) {
+      this.pat = this.pendingPat;
+      this.pendingPat = null;
+      this.motifId = "seed";
+      this.respondCycle = -1;
+      if (this.onGrooveChange) this.onGrooveChange(this.pat);
+    }
+
+    const Pt = this.pat, ctl = this.ctl;
 
     // Lift / Simmer ramps move heat a step per cycle toward their target.
     if (this.heatRamp !== 0) {
@@ -78,8 +93,8 @@
 
     // ROOT and WEAVE: response figure if answering a call, else base or
     // a variant when they hold the turn (or heat runs high).
-    plan.root = toMap(this.pickSupport(Pt.root, isResponse, this.turn === "weave"));
-    plan.weave = toMap(this.pickSupport(Pt.weave, isResponse, this.turn === "weave"));
+    plan.root = toMap(this.pickSupport("root", Pt.root, isResponse, this.turn === "weave"));
+    plan.weave = toMap(this.pickSupport("weave", Pt.weave, isResponse, this.turn === "weave"));
 
     // GRAIN thickens with density/heat via event gating; on response
     // cycles it simply digs in (accent lift handled at render).
@@ -101,9 +116,9 @@
       let ev = motif.ev.slice();
       const mutP = this.playerById("spark").vary * (0.25 + ctl.heat * 0.5);
       if (ev.length && Math.random() < mutP) {
-        const keys = Object.keys(Pt.transforms);
+        const keys = Object.keys(L.Patterns.transforms);
         const t = keys[Math.floor(Math.random() * keys.length)];
-        ev = Pt.transforms[t](ev);
+        ev = L.Patterns.transforms[t](ev);
       }
       plan.spark = toMap(ev);
       if (motif.call && !this.manualLead) this.respondCycle = cycle + 1;
@@ -113,9 +128,9 @@
     this.plan = plan;
   };
 
-  Ensemble.prototype.pickSupport = function (part, isResponse, holdsTurn) {
+  Ensemble.prototype.pickSupport = function (playerId, part, isResponse, holdsTurn) {
     if (isResponse && part.response) return part.response;
-    const p = this.playerById(part === L.Patterns.root ? "root" : "weave");
+    const p = this.playerById(playerId);
     const varyP = (holdsTurn ? 0.45 : 0.12) * p.vary * (0.4 + this.ctl.heat);
     if (part.variants.length && Math.random() < varyP) {
       return part.variants[Math.floor(Math.random() * part.variants.length)];
@@ -131,7 +146,7 @@
   };
 
   Ensemble.prototype.pickMotif = function () {
-    const motifs = L.Patterns.sparkMotifs;
+    const motifs = this.pat.sparkMotifs;
     const cur = motifs.find(m => m.id === this.motifId) || motifs[1];
 
     // A user-armed call fires as soon as possible.
@@ -185,7 +200,8 @@
         if (this.responseNow && (p.id === "grain" || p.id === "halo")) a = Math.min(1, a * 1.25);
 
         const vel = H.velocity(a, pulse, ctl);
-        const off = H.offset(p.id, pulse, when, ctl, pulseDur);
+        const lean = this.pat.feel && this.pat.feel.lean;
+        const off = H.offset(p.id, pulse, when, ctl, pulseDur, lean);
         const t = Math.max(this.ctx.currentTime + 0.002, when + off);
 
         L.Voices.play(this.ctx, this.mixer.buses[p.id].gain, art.stroke, t, vel);
@@ -204,6 +220,28 @@
     if (name === "break") this.breakCycle = cur + 1;
     if (name === "lift") this.heatRamp = 0.07;
     if (name === "simmer") this.heatRamp = -0.07;
+  };
+
+  /* Swap the groove. While the ensemble is playing this lands on the next
+   * cycle line so the change arrives in time; stopped, it applies at once
+   * so the ring shows the new weave immediately. */
+  Ensemble.prototype.setPatternSet = function (set) {
+    if (this.sched.running) {
+      this.pendingPat = set;
+    } else {
+      this.pat = set;
+      this.motifId = "seed";
+      this.respondCycle = -1;
+      this.breakCycle = -1;
+      if (this.onGrooveChange) this.onGrooveChange(set);
+      this.planCycle(0);
+    }
+  };
+
+  Ensemble.prototype.regenerate = function (seed) {
+    const set = L.Generator.generate(seed);
+    this.setPatternSet(set);
+    return set;
   };
 
   Ensemble.prototype.setControl = function (name, v) {

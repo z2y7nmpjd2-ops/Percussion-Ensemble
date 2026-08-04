@@ -1,12 +1,14 @@
 /* LATTICE — main.js
- * Bootstraps audio on the first user gesture (browsers require it),
- * builds the ensemble, and runs the transport.
+ * Builds the whole instrument at load so the groove panel and the ring
+ * are live before a note sounds. The audio context starts suspended;
+ * the first press of Start resumes it, as browsers require.
  */
 (function () {
   "use strict";
 
   const L = window.LATTICE;
-  let ctx = null, mixer = null, sched = null, ens = null, visual = null, controls = null;
+  let ctx = null, mixer = null, sched = null, ens = null, visual = null,
+      controls = null, grooves = null;
 
   function boot() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -15,23 +17,20 @@
     ens = new L.Ensemble(ctx, mixer, sched);
     visual = new L.Visual(document.getElementById("ring"), ens, sched, ctx);
     controls = new L.Controls(ens, mixer, sched);
+    grooves = new L.GrooveUI(ens, mixer, sched, controls);
     visual.start();
 
     // Console access for power users: conduct or reshape the ensemble live,
-    // e.g. LATTICE.app.ens.cue("call") or LATTICE.app.ens.setControl("heat", 0.9)
-    L.app = { ctx, mixer, sched, ens, visual, controls };
+    // e.g. LATTICE.app.ens.cue("call") or LATTICE.app.ens.regenerate("tide")
+    L.app = { ctx, mixer, sched, ens, visual, controls, grooves };
 
-    // cycle counter readout
     const num = document.getElementById("cycle-num");
     setInterval(() => {
       num.textContent = sched.running ? ("cycle " + (sched.cycle + 1)) : "–";
     }, 250);
-  }
 
-  window.addEventListener("DOMContentLoaded", () => {
     const btn = document.getElementById("btn-power");
     btn.addEventListener("click", () => {
-      if (!ctx) boot();
       if (ctx.state === "suspended") ctx.resume();
       if (sched.running) {
         sched.stop();
@@ -43,5 +42,7 @@
         btn.classList.add("running");
       }
     });
-  });
+  }
+
+  window.addEventListener("DOMContentLoaded", boot);
 })();

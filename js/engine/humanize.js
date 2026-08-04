@@ -27,13 +27,14 @@
    * same wave instead of snapping straight.
    */
   const LEAN_16 = [0.0, 0.42, -0.08, 0.3]; // per 16th within a beat, in fractions of max lean
-  H.lilt = function (pulseInCycle, liltAmt, pulseDur) {
+  H.lilt = function (pulseInCycle, liltAmt, pulseDur, lean16) {
+    const L16 = lean16 || LEAN_16;             // each groove carries its own feel
     const inBeat = pulseInCycle % 12;          // 0..11
     const pos = inBeat / 3;                    // 0..4 (fractional for off-16th pulses)
     const i = Math.floor(pos) % 4;
     const j = (i + 1) % 4;
     const frac = pos - Math.floor(pos);
-    const lean = LEAN_16[i] * (1 - frac) + LEAN_16[j] * frac;
+    const lean = L16[i] * (1 - frac) + L16[j] * frac;
     // max lean at full lilt: ~40% of a pulse
     return lean * liltAmt * pulseDur * 0.4;
   };
@@ -53,9 +54,9 @@
   };
 
   // Full offset for one stroke of one player.
-  H.offset = function (playerId, pulseInCycle, absTime, ctl, pulseDur) {
+  H.offset = function (playerId, pulseInCycle, absTime, ctl, pulseDur, lean16) {
     const p = H.profiles[playerId] || H.profiles.weave;
-    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur);
+    let off = H.lilt(pulseInCycle, ctl.lilt, pulseDur, lean16);
     off += (p.lean / 1000) * ctl.spread * 2;                 // personal lean
     off += (p.driftAmt / 1000) * ctl.spread *
            Math.sin(absTime * p.driftRate * 2 * Math.PI);    // slow wander

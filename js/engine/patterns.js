@@ -273,6 +273,31 @@
     halo:  [{ p: 33, stroke: "halo.ring", a: 0.9, anchor: true }]
   };
 
+  /* ---- The hand-written groove, packaged in the same shape the
+   * generator produces, so it is simply one groove among many. */
+  P.houseSet = function () {
+    return {
+      seed: "HOUSE",
+      name: "House Weave",
+      feel: { id: "rolling", lean: [0, 0.42, -0.08, 0.3] },
+      keel:  { base: P.keel.base,  variants: [] },
+      root:  { base: P.root.base,  variants: P.root.variants,  response: P.root.response },
+      weave: { base: P.weave.base, variants: P.weave.variants, response: P.weave.response },
+      grain: { base: P.grain.base, variants: [] },
+      halo:  { base: P.halo.base,  variants: P.halo.variants },
+      sparkMotifs: P.sparkMotifs,
+      breakFigure: P.breakFigure,
+      meta: {
+        key: "9·9·6·9·9·6",
+        feel: "rolling",
+        grain: "sixteenths",
+        grainLock: "beat",
+        rootAnchors: 3,
+        weaveVoices: P.weave.base.length
+      }
+    };
+  };
+
   window.LATTICE = window.LATTICE || {};
   window.LATTICE.Patterns = P;
 })();
