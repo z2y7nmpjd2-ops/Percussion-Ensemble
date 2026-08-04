@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LATTICE — Interlocking Synthetic Percussion Ensemble</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>LATTICE</h1>
+    <p class="tagline">an interlocking synthetic percussion ensemble &mdash; six voices, one weave</p>
+  </div>
+  <div class="transport">
+    <button id="btn-power" class="big">Start</button>
+    <div class="knob-group">
+      <label for="tempo">Tempo <span id="tempo-val">96</span></label>
+      <input type="range" id="tempo" min="60" max="150" value="96" step="1">
+    </div>
+    <div class="knob-group">
+      <label for="master">Level <span id="master-val">80</span></label>
+      <input type="range" id="master" min="0" max="100" value="80" step="1">
+    </div>
+    <div class="knob-group">
+      <label for="tone">Tone <span id="tone-val">70</span></label>
+      <input type="range" id="tone" min="0" max="100" value="70" step="1">
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="stage">
+    <canvas id="ring" width="640" height="640"></canvas>
+    <div id="cycle-readout"><span id="cycle-num">–</span></div>
+  </section>
+
+  <section id="conductor">
+    <h2>Conduct</h2>
+    <div class="macro-grid">
+      <div class="knob-group">
+        <label for="heat">Heat <span id="heat-val">35</span></label>
+        <input type="range" id="heat" min="0" max="100" value="35" step="1">
+        <p class="hint">variation, ghost notes, lead energy</p>
+      </div>
+      <div class="knob-group">
+        <label for="density">Density <span id="density-val">50</span></label>
+        <input type="range" id="density" min="0" max="100" value="50" step="1">
+        <p class="hint">how full the supporting parts play</p>
+      </div>
+      <div class="knob-group">
+        <label for="lilt">Lilt <span id="lilt-val">40</span></label>
+        <input type="range" id="lilt" min="0" max="100" value="40" step="1">
+        <p class="hint">off-pulse lean of the whole grid</p>
+      </div>
+      <div class="knob-group">
+        <label for="spread">Spread <span id="spread-val">60</span></label>
+        <input type="range" id="spread" min="0" max="100" value="60" step="1">
+        <p class="hint">each player's personal timing lean</p>
+      </div>
+      <div class="knob-group">
+        <label for="loose">Loose <span id="loose-val">45</span></label>
+        <input type="range" id="loose" min="0" max="100" value="45" step="1">
+        <p class="hint">human jitter, drift and velocity life</p>
+      </div>
+    </div>
+    <div class="cue-row">
+      <button id="cue-call" class="cue">Call &amp; Answer</button>
+      <button id="cue-break" class="cue">Break</button>
+      <button id="cue-lift" class="cue">Lift</button>
+      <button id="cue-simmer" class="cue">Simmer</button>
+    </div>
+    <div class="cue-row">
+      <label class="toggle"><input type="checkbox" id="take-lead"> Take the lead (play Spark from your keyboard)</label>
+    </div>
+  </section>
+
+  <section id="ensemble-panel">
+    <h2>Players</h2>
+    <div id="players"></div>
+  </section>
+
+  <section id="playing">
+    <h2>Play along</h2>
+    <p>Click Start, then use your keyboard. Hold <b>Shift</b> for accented strokes.</p>
+    <table class="keymap">
+      <tr><th>Spark (lead)</th><td><b>Q</b> open &middot; <b>W</b> crack &middot; <b>E</b> touch</td></tr>
+      <tr><th>Weave (mid)</th><td><b>A</b> tone &middot; <b>S</b> snap &middot; <b>D</b> touch</td></tr>
+      <tr><th>Root (low)</th><td><b>Z</b> open &middot; <b>X</b> press</td></tr>
+      <tr><th>Keel (guide)</th><td><b>T</b> tick &middot; <b>Y</b> tock</td></tr>
+      <tr><th>Grain (shaker)</th><td><b>G</b> push &middot; <b>H</b> pull</td></tr>
+      <tr><th>Halo (ring)</th><td><b>B</b> ring &middot; <b>N</b> damp</td></tr>
+    </table>
+  </section>
+</main>
+
+<footer>
+  <p>All sound is synthesized live in your browser &mdash; no samples. Dry, subdued transients by design.</p>
+</footer>
+
+<script src="js/audio/voices.js"></script>
+<script src="js/audio/mixer.js"></script>
+<script src="js/engine/humanize.js"></script>
+<script src="js/engine/patterns.js"></script>
+<script src="js/engine/scheduler.js"></script>
+<script src="js/engine/ensemble.js"></script>
+<script src="js/ui/visual.js"></script>
+<script src="js/ui/controls.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
