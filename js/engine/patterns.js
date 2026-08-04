@@ -35,9 +35,11 @@
     { p: 44, stroke: "spine.high", a: 0.8,  anchor: true }
   ];
 
-  /* ---- THE FAMILY: three tuned stick drums whose parts are one line.
-   * Read the three together and a melody appears — low, mid, high, high,
-   * low, mid … — with each drum resting while its neighbours speak.
+  /* ---- THE FAMILY: three registers of one damped drum, whose parts are
+   * a single line. Read the three together and a contour appears — low,
+   * mid, high, high, low, mid … — each drum resting while its neighbours
+   * speak. The drums are unpitched, so the line is heard as movement
+   * through register and colour rather than as a tune.
    * Each player also carries a striker; the three strikers interlock
    * into a continuous subdivision none of them plays alone. */
   const FAMILY_BASE = {
@@ -309,7 +311,7 @@
       ppc: 48,
       meter: "ternary",
       step: 4,
-      tuning: { floor: 74, column: 99, arch: 148, drive: 88, caller: 104 },
+      register: { floor: 84, column: 132, arch: 205, drive: 98, caller: 152 },
       feel: { id: "rolling", lean: [0, 0.16, 0.06], profiles: {} },
       spine: { base: SPINE, variants: [] },
       family: { base: FAMILY_BASE, variants: FAMILY_VARIANTS, response: FAMILY_RESPONSE },
@@ -322,7 +324,7 @@
         key: "8·8·4·8·8·8·4",
         feel: "rolling",
         archetype: "house",
-        tuning: "1 : 4/3 : 2",
+        spacing: "mid",
         contour: "written",
         bells: "interlocked",
         engine: "two-beat cell"

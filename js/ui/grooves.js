@@ -79,7 +79,7 @@
     if (m.key) add("timeline " + m.key);
     if (m.archetype) add(m.archetype);
     if (m.feel) add(m.feel + " feel");
-    if (m.tuning) add("tuned in " + m.tuning);
+    if (m.spacing) add(m.spacing + " spacing");
     if (m.contour) add("line: " + m.contour);
     if (m.bells) add("strikers: " + m.bells);
     if (m.engine) add("engine: " + m.engine);
@@ -233,7 +233,7 @@
       const rest = [m.meter || null,
                     m.beats ? m.beats + " beats" : null,
                     m.key ? "timeline " + m.key : null,
-                    m.tuning ? "tuned in " + m.tuning : null,
+                    m.spacing ? m.spacing + " spacing" : null,
                     item.tempo ? item.tempo + " bpm" : null]
                    .filter(Boolean).join("  ·  ");
       meta.appendChild(document.createTextNode(rest ? "  ·  " + rest : ""));

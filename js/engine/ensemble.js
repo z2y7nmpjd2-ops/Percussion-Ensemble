@@ -4,7 +4,7 @@
  *
  * The three family drums are planned as ONE part, never independently —
  * their strokes are a single composite line handed out across three
- * pitches, and pulling one drum out on its own would break the melody.
+ * registers, and pulling one drum out alone would break the contour.
  * The lead and the family trade variation turns; the accompaniment drum
  * holds the engine steady underneath both.
  */
@@ -191,7 +191,7 @@
   Ensemble.prototype.renderPulse = function (pulse, when) {
     const H = L.Humanize, ctl = this.ctl;
     const pulseDur = this.sched.pulseDur();
-    const tuning = this.pat.tuning;
+    const register = this.pat.register || this.pat.tuning;
     const step = this.pat.step || 3;
 
     for (const p of this.players) {
@@ -212,7 +212,7 @@
         const off = H.offset(p.id, pulse, when, ctl, pulseDur, this.pat.feel);
         const t = Math.max(this.ctx.currentTime + 0.002, when + off);
 
-        L.Voices.play(this.ctx, this.mixer.buses[p.id].gain, art.stroke, t, vel, tuning);
+        L.Voices.play(this.ctx, this.mixer.buses[p.id].gain, art.stroke, t, vel, register);
         this.lastHits.push({ player: p.id, pulse: pulse, time: t, a: vel });
       }
     }
@@ -266,7 +266,7 @@
   Ensemble.prototype.manual = function (playerId, stroke, accent) {
     const vel = Math.max(0.05, Math.min(1, accent * (0.92 + Math.random() * 0.16)));
     const t = this.ctx.currentTime + 0.003;
-    L.Voices.play(this.ctx, this.mixer.buses[playerId].gain, stroke, t, vel, this.pat.tuning);
+    L.Voices.play(this.ctx, this.mixer.buses[playerId].gain, stroke, t, vel, this.pat.register || this.pat.tuning);
     const pos = Math.floor(this.sched.position(this.ctx.currentTime) * this.sched.ppc);
     this.lastHits.push({ player: playerId, pulse: pos, time: t, a: vel });
   };

@@ -3,10 +3,11 @@
 **A synthetic drum circle — a playable instrument for live performance and
 accompaniment.**
 
-Six synthesized drums play as a circle of listening musicians. Three of them are
-a *tuned family* whose parts are not three patterns but one composite melody
-handed out across three pitches; each of those players also carries a hand
-striker, and the strikers interlock into a subdivision none of them plays alone.
+Six synthesized drums play as a circle of listening musicians. Every one of them
+is **muted and unpitched**. Three are a *family* separated by register, whose
+parts are not three patterns but one composite line handed out across three
+registers; each of those players also carries a hand striker, and the strikers
+interlock into a subdivision none of them plays alone.
 Underneath sits an accompaniment drum holding a repeating cell steady, and above
 it a lead drum that calls, answers, and solos. A hard dry timeline runs through
 everything.
@@ -31,35 +32,43 @@ npx serve .        # or: python3 -m http.server
 | Voice | Role | Character |
 |-------|------|-----------|
 | **Spine** | timeline | A hard, dry two-pitch striker line, the shortest sound in the circle. Never varies — it is the reference everyone leans on. |
-| **Floor** | family, low | The lowest of the tuned family. Rings longest, carries the melody's resolutions. Open and muted stick strokes, plus a striker. |
-| **Column** | family, mid | The middle of the family. Open, muted, striker. |
-| **Arch** | family, high | The highest of the family; speaks and dies away quickest. Open, muted, striker. |
+| **Floor** | family, low | The lowest register of the family. Decays longest and carries the line's settling points. Open and muted stick strokes, plus a striker. |
+| **Column** | family, mid | The middle register. Open, muted, striker. |
+| **Arch** | family, high | The highest register; speaks and dies away quickest. Open, muted, striker. |
 | **Drive** | engine | The accompaniment hand drum. Bass, tone, slap and ghost strokes in a repeating cell that the rest of the circle counts on. |
 | **Caller** | lead | The lead hand drum — smaller, so it speaks faster. Issues calls the circle answers, and takes the solos. |
 
 ## The sound
 
-Every voice is a drum, synthesized from a membrane, a contact and a shell:
+Every voice is a drum, and every drum is **muted and atonal**.
 
-- **Membrane** — a fundamental that *falls into* pitch (up to a 40% drop over
-  ~40 ms), plus inharmonic modes above it that die away faster. This is what
-  gives a struck skin its "boo" instead of a synthesizer's flat thud.
-- **Contact** — the stick or the hand landing: band-limited noise, double-poled
-  so a slap can never turn into a hiss, and mixed well under the body.
-- **Shell** — a short resonant ring behind the skin that reads as wood.
+**Atonal.** There is not one oscillator in the instrument. Each stroke is a burst
+of noise shaped by a bank of bandpass resonators sitting at inharmonic ratios
+(1 : 1.62 : 2.51 : 3.77), with Q held near 1 so no partial can ever narrow into a
+note. Where weight is needed it comes from noise driven through a resonant
+lowpass whose cutoff falls fast — heft and a sense of "low" with no frequency to
+name. On top of that, **every stroke lands somewhere slightly different**: band
+centres are jittered 10–17% per hit, so no two strokes share a frequency and no
+pitch centre can form across a pattern.
 
-The house style stays **dry and subdued at the transient**: every stroke is
-ramped over 2–6 ms rather than clicked, noise is band-limited, and the only
-"space" is a 60 ms synthetic glue at −18 dB. What drums are allowed that thinner
-voices were not is **body**. Measured from rendered strokes: bass strokes carry
-91–94% of their energy below 200 Hz, the low drum rings 265 ms against the high
-drum's 159 ms, muted strokes fall to 43–52 ms, and every attack measures at least
-2.2 ms. Dryness lives in the transient and the absence of any wash — not in
-starving the low end.
+The drums are separated by **register, not interval**. Each groove picks a
+spacing (close, mid, wide, steep) whose every pair — mid/low, high/mid, high/low
+— is deliberately kept clear of the simple ratios (5:4, 4:3, 3:2, 5:3, 2:1, 5:2,
+3:1) that would put a chord back into the family.
 
-The family is **tuned as a set** (fourths, fifths, close, wide or open voicings
-over a 62–84 Hz root), which is what lets its composite line read as a melody
-rather than as three separate drums.
+**Muted.** Everything is damped. Measured from rendered strokes, the longest
+sound in the circle falls 40 dB in about 40 ms and most are 13–25 ms; there is no
+ring anywhere.
+
+**Still dry at the transient.** Every attack is ramped 2.4–6 ms rather than
+clicked, contact noise is double-poled so a slap cannot become a hiss, and the
+only "space" is a 60 ms synthetic glue at −18 dB.
+
+Verified against a pure-tone control that scores 1.000 on the same metrics, every
+stroke measures a periodicity of 0.13–0.46 and a spectral flatness of 0.30–0.79,
+with no single spectral bin owning more than 8% of the energy. Registers still
+ascend across the family, which is what lets the composite line read as a
+contour — of register and colour rather than of pitch.
 
 ## The grid
 
@@ -69,7 +78,7 @@ A beat is always **12 pulses**, which carries both meters exactly:
 - **ternary** — subdivision every 4 pulses, three to a beat
 
 Each groove picks one, and the choice reaches everything: the spans the timeline
-is built from, the grid the family's melody lands on, the engine's cell, the
+is built from, the grid the family's line lands on, the engine's cell, the
 lead's phrase steps, and the lilt curve (four lean values per beat in a binary
 groove, three in a ternary one). A cycle is 3–6 beats long. The hand-written
 groove is ternary, four beats — twelve subdivisions to a cycle.
@@ -91,7 +100,7 @@ groove is ternary, four beats — twelve subdivisions to a cycle.
 ## How the players listen to each other
 
 - **The family moves as one.** Its three parts are a single line; a variation
-  re-voices the whole melody through a new contour rather than changing one drum.
+  re-voices the whole line through a new contour rather than changing one drum.
 - **Turn-taking** — variation privilege alternates between the lead and the
   family every two cycles, so they trade phrases instead of talking over each
   other. The engine holds steady underneath both, varying rarely by design.
@@ -109,13 +118,14 @@ groove is ternary, four beats — twelve subdivisions to a cycle.
 is constrained rather than random, so the interlock survives every re-roll:
 
 - **Meter and cycle length** — binary or ternary, 3–6 beats.
-- **Tuning** — the family's voicing and root, so each circle has its own range.
+- **Spacing** — how far apart the family's three registers sit, and where the
+  set as a whole starts, so each circle has its own range.
 - **The timeline** — an uneven partition of the cycle into spans that are all
   multiples of the subdivision. Even partitions are rejected: they would give the
   circle nothing to lean on, as would a figure that never cuts across the beat.
-- **The family's melody** — a rhythm across the subdivision grid, then a
+- **The family's line** — a rhythm across the subdivision grid, then a
   *contour* (rise, fall, arch, valley, rock, pedal) deciding which drum speaks
-  each time. Stepwise motion is preferred over leaps, and the line resolves onto
+  each time. Stepwise motion is preferred over leaps, and the line settles onto
   the low drum where the cycle turns over. Muted strokes fill where the line is
   silent, and an occasional drag doubles a stroke a half-subdivision later.
 - **The strikers** — *split* (three hands, one continuous line between them),
@@ -130,8 +140,8 @@ is constrained rather than random, so the interlock survives every re-roll:
 - **The feel** — a lilt archetype matched to the meter, plus per-groove nudges to
   each player's personal timing.
 
-Every circle is checked for playability before it reaches your ears — the melody
-needs enough notes, at least two drums must voice it, the engine needs its
+Every circle is checked for playability before it reaches your ears — the line
+needs enough strokes, at least two drums must voice it, the engine needs its
 anchor, and no stroke may fall outside the cycle. A circle that fails re-rolls
 automatically. Across 600 sampled seeds, every groove was structurally unique.
 
@@ -181,11 +191,11 @@ Power users: everything is scriptable from the console via `LATTICE.app`, e.g.
 
 - `js/engine/patterns.js` — the hand-written circle, and the lead's phrase
   transforms. `P.houseSet()` packages it in the shape the generator emits.
-- `js/engine/generator.js` — meter and tuning, the timeline partition, the
-  composite-melody contour grammar, striker styles, engine cells, phrase
+- `js/engine/generator.js` — meter and register spacing, the timeline partition, the
+  composite-line contour grammar, striker styles, engine cells, phrase
   grammars, and the playability check every circle must pass.
-- `js/audio/voices.js` — the membrane / contact / shell synthesis behind all
-  nineteen strokes.
+- `js/audio/voices.js` — the resonator banks, low-body and contact layers behind
+  all nineteen strokes, plus the per-stroke frequency spread.
 - `js/engine/humanize.js` — per-player timing personalities and the lilt curve.
 
 ## Architecture
@@ -193,11 +203,12 @@ Power users: everything is scriptable from the console via `LATTICE.app`, e.g.
 ```
 index.html
 css/style.css
-js/audio/voices.js     19 drum strokes: membrane + contact + shell
+js/audio/voices.js     19 muted, unpitched drum strokes: noise through
+                       inharmonic low-Q resonators, jittered per stroke
 js/audio/mixer.js      per-player buses → glue → tone → compressor → master
 js/engine/humanize.js  meter-aware lilt, timing personalities, velocity life
 js/engine/patterns.js  the hand-written circle, lead phrase transforms
-js/engine/generator.js seeded generation: meter, tuning, melody contour,
+js/engine/generator.js seeded generation: meter, register spacing, contour,
                        strikers, engine cells, phrase grammars
 js/engine/scheduler.js lookahead clock (25 ms timer, 140 ms horizon)
 js/engine/ensemble.js  per-cycle planning; the family plans as one part

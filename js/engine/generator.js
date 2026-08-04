@@ -1,7 +1,7 @@
 /* LATTICE — generator.js
  * Grows a whole circle from a short seed: its meter, the length of its
- * cycle, how the drum family is tuned, the timeline everyone hangs on,
- * the composite melody the family shares, the strikers that interlock
+ * cycle, how the drum family is spaced by register, the timeline everyone
+ * hangs on, the composite line the family shares, the strikers that interlock
  * above it, the engine underneath, and the lead's vocabulary.
  *
  * Generation is constrained rather than random: parts are placed
@@ -178,27 +178,31 @@
     };
   }
 
-  // The family is tuned as a set — its intervals are what make the
-  // composite line read as a melody rather than three separate drums.
-  const TUNINGS = [
-    { id: "fourths", r: [1, 4 / 3, 2] },
-    { id: "fifths",  r: [1, 3 / 2, 2] },
-    { id: "open",    r: [1, 3 / 2, 9 / 4] },
-    { id: "close",   r: [1, 5 / 4, 3 / 2] },
-    { id: "wide",    r: [1, 4 / 3, 7 / 3] }
+  /* The family is spaced by REGISTER, not tuned by interval. The ratios
+   * below are deliberately not simple fractions, and the voices they feed
+   * are broadband, so the three drums separate without ever implying a
+   * chord. Spacing decides how far apart the composite line ranges. */
+  const SPACINGS = [
+    { id: "close", r: [1, 1.43, 2.25] },
+    { id: "mid",   r: [1, 1.59, 2.80] },
+    { id: "wide",  r: [1, 1.78, 3.33] },
+    { id: "steep", r: [1, 2.13, 3.71] }
   ];
+  // Every pair above — mid/low, high/mid and high/low — is kept clear of
+  // the simple ratios (5:4, 4:3, 3:2, 5:3, 2:1, 5:2, 3:1) that would put
+  // an interval back into the family.
 
-  function genTuning(R) {
-    const t = R.pick(TUNINGS);
-    const base = R.range(62, 84);
+  function genRegister(R) {
+    const t = R.pick(SPACINGS);
+    const base = R.range(72, 92);
     return {
       id: t.id,
-      tuning: {
+      register: {
         floor:  Math.round(base),
         column: Math.round(base * t.r[1]),
         arch:   Math.round(base * t.r[2]),
-        drive:  Math.round(R.range(80, 100)),
-        caller: Math.round(R.range(98, 122))
+        drive:  Math.round(R.range(88, 112)),
+        caller: Math.round(R.range(132, 172))
       }
     };
   }
@@ -260,12 +264,12 @@
              part: { base: dedupe(ev), variants: [] } };
   }
 
-  /* ---------- the family's composite melody ----------
+  /* ---------- the family's composite line ----------
    * The three drums are written as ONE line: a rhythm across the
    * subdivision grid, and a contour that says which drum speaks each
-   * time. Stepwise motion is preferred, and the line resolves onto the
-   * low drum at structural points — that resolution is what makes three
-   * drums sound like one instrument with a range. */
+   * time. Stepwise motion is preferred, and the line settles onto the low
+   * drum at structural points — that settling is what makes three
+   * unpitched drums read as one instrument with a range. */
 
   const CONTOURS = ["rise", "fall", "arch", "valley", "rock", "pedal"];
 
@@ -663,7 +667,7 @@
     const ppc = R.weighted([36, 48, 60, 72], [1.0, 3.0, 0.85, 0.6]);
     const arch_ = R.pick(ARCHETYPES);
     const feel = genFeel(R, meter);
-    const tune = genTuning(R);
+    const reg = genRegister(R);
 
     const spine = genSpine(R, ppc, step);
     const C = { ppc: ppc, beats: ppc / PPB, step: step, meter: meter,
@@ -697,7 +701,7 @@
       ppc: ppc,
       meter: meter,
       step: step,
-      tuning: tune.tuning,
+      register: reg.register,
       feel: feel,
       spine: spine.part,
       family: {
@@ -714,7 +718,7 @@
         key: spine.key,
         feel: feel.id,
         archetype: arch_.id,
-        tuning: tune.id,
+        spacing: reg.id,
         contour: line.contour,
         bells: bellStyle,
         engine: drive.style + " / " + drive.cellBeats + "-beat cell"

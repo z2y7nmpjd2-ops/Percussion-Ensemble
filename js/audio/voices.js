@@ -1,32 +1,42 @@
 /* LATTICE — voices.js
- * Every voice here is a drum. The ensemble is built from two families:
+ * Every voice here is a drum, and every drum is MUTED and ATONAL.
  *
- *   - a family of three tuned stick drums (Floor, Column, Arch), each
- *     carrying a small hand striker, whose parts interlock into one
- *     composite melody;
- *   - two hand drums (Drive, Caller) with a bass / tone / slap / ghost
- *     stroke vocabulary;
+ * Atonal: nothing in the circle states a pitch. Each stroke is a burst of
+ * noise shaped by a bank of bandpass resonators whose centres sit at
+ * inharmonic ratios (1 : 1.62 : 2.51 …) and whose Q is kept low enough
+ * that no partial ever narrows into a note. There is not one oscillator
+ * in the instrument: where weight is needed it comes from noise driven
+ * through a resonant lowpass whose cutoff falls fast, which has heft and
+ * a sense of "low" but no frequency to name. The drums differ from each
+ * other by REGISTER, not by interval:
+ * the family ascends in spectral centre, which is what lets its composite
+ * line still read as a contour, but no two of them form a tuned interval.
  *
- *   plus Spine, a hard dry striker line that the whole circle hangs on.
+ * Muted: everything is damped. The longest sound in the circle decays in
+ * well under 100 ms and most are far shorter; there is no ring anywhere.
  *
- * The house style stays DRY and SUBDUED at the attack — every stroke is
- * ramped over 2–6 ms rather than clicked, and noise components are
- * band-limited and mixed low. What drums are allowed that the earlier
- * voices were not is BODY: a real fundamental with a pitch drop into it,
- * inharmonic membrane modes above it, and a resonant shell behind it.
- * Dryness lives in the transient and the absence of any wash, not in
- * starving the low end.
+ * Attacks stay dry and subdued — ramped over 2–6 ms, never clicked.
  */
 (function () {
   "use strict";
 
   const V = {};
 
-  // Frequencies the ensemble is tuned to when a groove doesn't say otherwise.
-  const DEFAULT_TUNING = {
-    floor: 74, column: 99, arch: 148,   // the stick-drum family
-    drive: 88, caller: 104              // the hand drums (bass pitch)
+  // Spectral centres the circle sits at when a groove doesn't say otherwise.
+  // These are registers, not tunings: the ratios between them are
+  // deliberately not simple, and the spectra are too broad to imply one.
+  const DEFAULT_REGISTER = {
+    floor: 84, column: 132, arch: 205,   // the family, low to high
+    drive: 98, caller: 152               // the hand drums
   };
+
+  // Inharmonic partial ratios — no integer or simple-fraction relationships.
+  const INHARM = [1, 1.62, 2.51, 3.77];
+
+  /* Broad, low-Q noise resonators put out far less peak amplitude than
+   * the narrow ones (or the oscillators) they replaced, so the whole
+   * instrument is trimmed back up here rather than in twenty places. */
+  const TRIM = 2.7;
 
   let noiseBuf = null;
   function getNoise(ctx) {
@@ -38,67 +48,88 @@
     return noiseBuf;
   }
 
-  let satCurve = null;
-  function getSat() {
-    if (!satCurve) {
-      satCurve = new Float32Array(1024);
-      for (let i = 0; i < 1024; i++) {
-        const x = (i / 511.5) - 1;
-        satCurve[i] = Math.tanh(1.7 * x);
-      }
-    }
-    return satCurve;
-  }
-
   /* ---------- building blocks ---------- */
 
-  /* The membrane: a fundamental that falls into pitch, plus inharmonic
-   * modes above it that die away faster. This is what gives a struck
-   * skin its "boo" rather than a synthesizer's flat sine thud. */
-  function membrane(ctx, out, when, o) {
-    const modes = o.modes || [1, 1.59, 2.14];
-    const decay = o.decay || 0.3;
-    for (let i = 0; i < modes.length; i++) {
-      const f = o.f0 * modes[i];
-      const osc = ctx.createOscillator();
-      osc.type = i === 0 ? (o.type || "sine") : "sine";
-      osc.frequency.setValueAtTime(f * (o.drop || 1.3), when);
-      osc.frequency.exponentialRampToValueAtTime(f, when + (o.dropTime || 0.035));
-
-      const g = ctx.createGain();
-      const peak = i === 0 ? o.peak : o.peak * (o.modeLevel || 0.18) / i;
-      const d = decay / (1 + i * 1.15);
-      g.gain.setValueAtTime(0.0001, when);
-      g.gain.linearRampToValueAtTime(peak, when + (o.attack || 0.004));
-      g.gain.exponentialRampToValueAtTime(0.0001, when + d);
-
-      if (i === 0 && o.sat) {
-        const ws = ctx.createWaveShaper();
-        ws.curve = getSat();
-        osc.connect(ws); ws.connect(g);
-      } else {
-        osc.connect(g);
-      }
-      g.connect(out);
-      osc.start(when);
-      osc.stop(when + d + 0.05);
-    }
-  }
-
-  /* The moment of contact — stick on skin, or the heel and fingers of a
-   * hand. Band-limited, brief, and mixed well under the body. */
-  function contact(ctx, out, when, o) {
+  /* A struck body: one noise burst through a bank of inharmonic
+   * resonators, each with its own decay. Higher bands die first, the way
+   * a damped head behaves. Q stays modest — high Q would ring a partial
+   * into a pitch, which is exactly what we are avoiding. */
+  function resonant(ctx, out, when, o) {
     const src = ctx.createBufferSource();
     src.buffer = getNoise(ctx);
     src.playbackRate.value = o.rate || 1;
 
+    // Every stroke sits somewhere slightly different. A drum that landed
+    // on the same frequency twice would start to sound like a note.
+    const spread = (o.jitter === undefined ? 0.11 : o.jitter);
+    const shift = 1 + (Math.random() * 2 - 1) * spread;
+
+    let longest = 0;
+    for (let i = 0; i < o.bands.length; i++) {
+      const b = o.bands[i];
+      const f = o.base * b.r * shift * (1 + (Math.random() * 2 - 1) * 0.04);
+      if (f > 15000) continue;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = f;
+      bp.Q.value = b.q;
+
+      const g = ctx.createGain();
+      const d = o.decay * (b.dec || 1);
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.linearRampToValueAtTime(o.peak * b.lvl * TRIM, when + (o.attack || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, when + d);
+      if (d > longest) longest = d;
+
+      src.connect(bp); bp.connect(g); g.connect(out);
+    }
+    src.start(when, Math.random() * 1.2);
+    src.stop(when + longest + 0.05);
+  }
+
+  /* Weight without pitch. An oscillator — even a sweeping one — is
+   * locally periodic and the ear reads that as a note, so the low end is
+   * noise driven through a resonant lowpass whose cutoff falls fast. The
+   * result has heft and a sense of "low" but no frequency to name. */
+  function body(ctx, out, when, o) {
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise(ctx);
+
+    const shift = 1 + (Math.random() * 2 - 1) * 0.11;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(o.from * shift, when);
+    lp.frequency.exponentialRampToValueAtTime(o.to * shift, when + (o.sweep || 0.05));
+    lp.Q.value = o.q || 0.7;   // at or below Butterworth: no resonant peak
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 32;              // keep subsonic rumble out
+    hp.Q.value = 0.6;
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(o.peak * TRIM, when + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, when + o.decay);
+
+    src.connect(lp); lp.connect(hp); hp.connect(g); g.connect(out);
+    src.start(when, Math.random() * 1.2);
+    src.stop(when + o.decay + 0.04);
+  }
+
+  /* The moment of contact — stick or hand landing. Band-limited and
+   * double-poled so nothing here can turn into a hiss or a click. */
+  function contact(ctx, out, when, o) {
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise(ctx);
+
     const bp = ctx.createBiquadFilter();
-    bp.type = o.filter || "bandpass";
+    bp.type = "bandpass";
     bp.frequency.setValueAtTime(o.freq, when);
-    if (o.freqEnd) bp.frequency.exponentialRampToValueAtTime(o.freqEnd, when + (o.decay || 0.05));
+    if (o.freqEnd) bp.frequency.exponentialRampToValueAtTime(o.freqEnd, when + o.decay);
     bp.Q.value = o.q || 1;
 
-    // A second pole keeps slaps from ever turning into a hiss.
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.value = o.ceiling || 5200;
@@ -106,137 +137,141 @@
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, when);
-    g.gain.linearRampToValueAtTime(o.peak, when + (o.attack || 0.0028));
-    g.gain.exponentialRampToValueAtTime(0.0001, when + (o.decay || 0.05));
+    g.gain.linearRampToValueAtTime(o.peak * TRIM, when + (o.attack || 0.0028));
+    g.gain.exponentialRampToValueAtTime(0.0001, when + o.decay);
 
     src.connect(bp); bp.connect(lp); lp.connect(g); g.connect(out);
     src.start(when, Math.random() * 1.2);
-    src.stop(when + (o.decay || 0.05) + 0.05);
+    src.stop(when + o.decay + 0.04);
   }
 
-  /* The shell behind the skin: a short resonant ring that reads as wood. */
-  function shell(ctx, out, when, o) {
-    const src = ctx.createBufferSource();
-    src.buffer = getNoise(ctx);
+  /* ---------- the family: three registers of one damped drum ---------- */
 
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = o.freq;
-    bp.Q.value = o.q || 7;
+  const OPEN_BANDS = [
+    { r: INHARM[0], q: 1.0, lvl: 1.0,  dec: 1.0 },
+    { r: INHARM[1], q: 1.5, lvl: 0.5,  dec: 0.62 },
+    { r: INHARM[2], q: 1.5, lvl: 0.26, dec: 0.4 },
+    { r: INHARM[3], q: 1.4, lvl: 0.12, dec: 0.26 }
+  ];
+  const MUTE_BANDS = [
+    { r: INHARM[0], q: 1.7, lvl: 1.0,  dec: 1.0 },
+    { r: INHARM[1], q: 1.6, lvl: 0.55, dec: 0.7 },
+    { r: INHARM[2], q: 1.5, lvl: 0.3,  dec: 0.5 }
+  ];
 
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, when);
-    g.gain.linearRampToValueAtTime(o.peak, when + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, when + (o.decay || 0.09));
-
-    src.connect(bp); bp.connect(g); g.connect(out);
-    src.start(when, Math.random() * 1.2);
-    src.stop(when + (o.decay || 0.09) + 0.05);
-  }
-
-  /* A small struck striker mounted on a drum: inharmonic, tight, dry. */
-  function striker(ctx, out, when, o) {
-    const ratios = o.ratios || [1, 2.76, 5.12];
-    for (let i = 0; i < ratios.length; i++) {
-      const osc = ctx.createOscillator();
-      osc.type = i === 0 ? "triangle" : "sine";
-      osc.frequency.setValueAtTime(o.f0 * ratios[i], when);
-      const g = ctx.createGain();
-      const peak = o.peak / (1 + i * 1.5);
-      const d = (o.decay || 0.13) / (1 + i * 0.7);
-      g.gain.setValueAtTime(0.0001, when);
-      g.gain.linearRampToValueAtTime(peak, when + (o.attack || 0.003));
-      g.gain.exponentialRampToValueAtTime(0.0001, when + d);
-      osc.connect(g); g.connect(out);
-      osc.start(when);
-      osc.stop(when + d + 0.04);
+  // size 1 = lowest of the family, 0 = highest
+  function familyOpen(ctx, out, when, vel, base, size) {
+    resonant(ctx, out, when, {
+      base: base, bands: OPEN_BANDS, jitter: 0.1 + size * 0.07,
+      peak: 0.76 * vel, attack: 0.0045, decay: 0.07 + size * 0.03
+    });
+    if (size > 0.4) {
+      body(ctx, out, when, {
+        from: base * 4.2, to: base * 1.35, sweep: 0.045, q: 0.7,
+        peak: 0.62 * vel * size, attack: 0.005, decay: 0.05 + size * 0.02
+      });
     }
     contact(ctx, out, when, {
-      freq: o.f0 * 4.5, q: 1.4, peak: o.peak * 0.22,
-      attack: 0.002, decay: 0.022, ceiling: 7000
-    });
-  }
-
-  /* ---------- the stick-drum family ----------
-   * One recipe, three tunings. The lowest drum rings longest; the
-   * highest speaks quickest, so the family's composite line has shape
-   * as well as pitch. */
-
-  function familyOpen(ctx, out, when, vel, f0, size) {
-    membrane(ctx, out, when, {
-      f0: f0, drop: 1.22, dropTime: 0.03 + size * 0.02,
-      modes: [1, 1.61, 2.19], modeLevel: 0.14,
-      peak: 0.62 * vel, attack: 0.0045, decay: 0.3 + size * 0.34, sat: true
-    });
-    contact(ctx, out, when, {
       freq: 2300 - size * 700, q: 0.9, peak: 0.07 * vel,
-      attack: 0.003, decay: 0.03, ceiling: 5000
-    });
-    shell(ctx, out, when, {
-      freq: 300 + (1 - size) * 340, q: 6, peak: 0.05 * vel, decay: 0.07
+      attack: 0.003, decay: 0.028, ceiling: 5000
     });
   }
 
-  function familyMute(ctx, out, when, vel, f0, size) {
-    membrane(ctx, out, when, {
-      f0: f0 * 1.06, drop: 1.15, dropTime: 0.015,
-      modes: [1, 1.59], modeLevel: 0.2,
-      peak: 0.34 * vel, attack: 0.0035, decay: 0.075 + size * 0.03, sat: true
+  function familyMute(ctx, out, when, vel, base, size) {
+    resonant(ctx, out, when, {
+      base: base * 1.09, bands: MUTE_BANDS,
+      peak: 0.44 * vel, attack: 0.0035, decay: 0.032 + size * 0.014
     });
     contact(ctx, out, when, {
       freq: 2600 - size * 600, q: 1.1, peak: 0.09 * vel,
-      attack: 0.0025, decay: 0.035, ceiling: 5400
+      attack: 0.0025, decay: 0.03, ceiling: 5400
+    });
+  }
+
+  // The striker: a dry clank, inharmonic and short. No bell tone.
+  function strikerHit(ctx, out, when, vel, base) {
+    resonant(ctx, out, when, {
+      base: base,
+      bands: [
+        { r: 1,    q: 3.0, lvl: 1.0,  dec: 1.0 },
+        { r: 1.74, q: 2.7, lvl: 0.62, dec: 0.72 },
+        { r: 2.83, q: 2.4, lvl: 0.4,  dec: 0.5 },
+        { r: 4.11, q: 2.1, lvl: 0.2,  dec: 0.34 }
+      ],
+      peak: 0.3 * vel, attack: 0.003, decay: 0.05
+    });
+    contact(ctx, out, when, {
+      freq: base * 3.6, q: 1.6, peak: 0.05 * vel,
+      attack: 0.002, decay: 0.02, ceiling: 7000
     });
   }
 
   /* ---------- the hand drums ---------- */
 
-  function handBass(ctx, out, when, vel, f0) {
-    membrane(ctx, out, when, {
-      f0: f0, drop: 1.42, dropTime: 0.042,
-      modes: [1, 1.58, 2.12], modeLevel: 0.12,
-      peak: 0.6 * vel, attack: 0.005, decay: 0.42, sat: true
+  function handBass(ctx, out, when, vel, base) {
+    resonant(ctx, out, when, {
+      base: base * 0.86, bands: OPEN_BANDS,
+      peak: 0.7 * vel, attack: 0.005, decay: 0.07
+    });
+    body(ctx, out, when, {
+      from: base * 4.4, to: base * 1.3, sweep: 0.05, q: 0.7,
+      peak: 0.78 * vel, attack: 0.005, decay: 0.062
     });
     contact(ctx, out, when, {
-      freq: 700, q: 0.7, peak: 0.045 * vel, attack: 0.004, decay: 0.04, ceiling: 3000
+      freq: 700, q: 0.7, peak: 0.045 * vel, attack: 0.004, decay: 0.035, ceiling: 3000
     });
   }
 
-  function handTone(ctx, out, when, vel, f0) {
-    membrane(ctx, out, when, {
-      f0: f0 * 2.4, drop: 1.2, dropTime: 0.022,
-      modes: [1, 1.6, 2.2], modeLevel: 0.22,
-      peak: 0.36 * vel, attack: 0.0035, decay: 0.17
+  function handTone(ctx, out, when, vel, base) {
+    resonant(ctx, out, when, {
+      base: base * 2.1,
+      bands: [
+        { r: 1,    q: 1.7, lvl: 1.0,  dec: 1.0 },
+        { r: 1.62, q: 1.55, lvl: 0.52, dec: 0.66 },
+        { r: 2.51, q: 1.4, lvl: 0.28, dec: 0.44 }
+      ],
+      peak: 0.42 * vel, attack: 0.0035, decay: 0.062
     });
     contact(ctx, out, when, {
-      freq: 1500, q: 0.9, peak: 0.06 * vel, attack: 0.003, decay: 0.032, ceiling: 4800
+      freq: 1500, q: 0.9, peak: 0.06 * vel, attack: 0.003, decay: 0.028, ceiling: 4800
     });
-    shell(ctx, out, when, { freq: 520, q: 6, peak: 0.03 * vel, decay: 0.055 });
   }
 
-  /* The slap: the ensemble's brightest sound, and the one most at risk
-   * of turning into a click. Its noise is swept downward, double-poled
-   * and kept short; a pitched knock underneath gives it a body to sit on. */
-  function handSlap(ctx, out, when, vel, f0) {
-    membrane(ctx, out, when, {
-      f0: f0 * 3.5, drop: 1.3, dropTime: 0.014,
-      modes: [1, 1.72], modeLevel: 0.3,
-      peak: 0.2 * vel, attack: 0.0028, decay: 0.075
+  /* The slap: the brightest sound in the circle and the one most at risk
+   * of becoming a click. Its noise is swept downward, double-poled, and
+   * kept short; a broad low resonance underneath gives it something to
+   * sit on without giving it a note. */
+  function handSlap(ctx, out, when, vel, base) {
+    resonant(ctx, out, when, {
+      base: base * 3.2,
+      bands: [
+        { r: 1,    q: 2.6, lvl: 1.0,  dec: 1.0 },
+        { r: 1.62, q: 2.2, lvl: 0.6,  dec: 0.7 },
+        { r: 2.51, q: 1.8, lvl: 0.34, dec: 0.48 }
+      ],
+      peak: 0.26 * vel, attack: 0.0028, decay: 0.04
     });
     contact(ctx, out, when, {
       freq: 3000, freqEnd: 1250, q: 1.25, peak: 0.19 * vel,
-      attack: 0.0025, decay: 0.06, ceiling: 5600
+      attack: 0.0025, decay: 0.045, ceiling: 5600
     });
-    shell(ctx, out, when, { freq: 780, q: 5, peak: 0.035 * vel, decay: 0.04 });
+    resonant(ctx, out, when, {
+      base: base * 0.95, bands: [{ r: 1, q: 1.1, lvl: 1, dec: 1 }],
+      peak: 0.1 * vel, attack: 0.004, decay: 0.035
+    });
   }
 
-  function handGhost(ctx, out, when, vel, f0) {
-    membrane(ctx, out, when, {
-      f0: f0 * 2.3, drop: 1.1, dropTime: 0.012,
-      modes: [1], peak: 0.1 * vel, attack: 0.004, decay: 0.055
+  function handGhost(ctx, out, when, vel, base) {
+    resonant(ctx, out, when, {
+      base: base * 2.0,
+      bands: [
+        { r: 1,    q: 1.55, lvl: 1.0, dec: 1.0 },
+        { r: 1.62, q: 1.4, lvl: 0.5, dec: 0.6 }
+      ],
+      peak: 0.14 * vel, attack: 0.004, decay: 0.028
     });
     contact(ctx, out, when, {
-      freq: 1900, q: 1.2, peak: 0.035 * vel, attack: 0.003, decay: 0.025, ceiling: 4600
+      freq: 1900, q: 1.2, peak: 0.035 * vel, attack: 0.003, decay: 0.02, ceiling: 4600
     });
   }
 
@@ -244,74 +279,81 @@
 
   const STROKES = {
 
-    /* SPINE — the timeline. Hard, dry, and pitched just enough to carry
-     * two voices; the shortest sound in the ensemble. */
+    /* SPINE — the timeline. Two registers of the same dry knock, the
+     * shortest sound in the circle. */
     "spine.high": (ctx, out, when, vel) => {
-      membrane(ctx, out, when, {
-        f0: 1240, drop: 1.18, dropTime: 0.008, modes: [1, 2.9], modeLevel: 0.25,
-        peak: 0.26 * vel, attack: 0.0022, decay: 0.05, type: "triangle"
+      resonant(ctx, out, when, {
+        base: 1180,
+        bands: [
+          { r: 1,    q: 2.0, lvl: 1.0,  dec: 1.0 },
+          { r: 1.62, q: 1.7, lvl: 0.5,  dec: 0.6 },
+          { r: 2.51, q: 1.5, lvl: 0.22, dec: 0.4 }
+        ],
+        peak: 0.34 * vel, attack: 0.0034, decay: 0.03
       });
       contact(ctx, out, when, {
-        freq: 3100, q: 2.2, peak: 0.06 * vel, attack: 0.002, decay: 0.022, ceiling: 6500
+        freq: 3100, q: 2.2, peak: 0.055 * vel, attack: 0.0032, decay: 0.018, ceiling: 6500
       });
     },
     "spine.low": (ctx, out, when, vel) => {
-      membrane(ctx, out, when, {
-        f0: 880, drop: 1.18, dropTime: 0.009, modes: [1, 2.9], modeLevel: 0.25,
-        peak: 0.26 * vel, attack: 0.0024, decay: 0.06, type: "triangle"
+      resonant(ctx, out, when, {
+        base: 830,
+        bands: [
+          { r: 1,    q: 2.0, lvl: 1.0,  dec: 1.0 },
+          { r: 1.62, q: 1.7, lvl: 0.5,  dec: 0.6 },
+          { r: 2.51, q: 1.5, lvl: 0.22, dec: 0.4 }
+        ],
+        peak: 0.34 * vel, attack: 0.0036, decay: 0.036
       });
       contact(ctx, out, when, {
-        freq: 2200, q: 2.2, peak: 0.055 * vel, attack: 0.002, decay: 0.026, ceiling: 6000
+        freq: 2200, q: 2.2, peak: 0.05 * vel, attack: 0.0034, decay: 0.02, ceiling: 6000
       });
     },
 
-    /* FLOOR / COLUMN / ARCH — the tuned family. size 1 = lowest. */
-    "floor.open":  (c, o, w, v, T) => familyOpen(c, o, w, v, T.floor, 1),
-    "floor.mute":  (c, o, w, v, T) => familyMute(c, o, w, v, T.floor, 1),
-    "floor.bell":  (c, o, w, v, T) => striker(c, o, w, {
-      f0: 620, ratios: [1, 2.74, 5.1], peak: 0.17 * v, decay: 0.16 }),
+    /* FLOOR / COLUMN / ARCH — one damped drum in three registers. */
+    "floor.open":  (c, o, w, v, R) => familyOpen(c, o, w, v, R.floor, 1),
+    "floor.mute":  (c, o, w, v, R) => familyMute(c, o, w, v, R.floor, 1),
+    "floor.bell":  (c, o, w, v, R) => strikerHit(c, o, w, v, 560),
 
-    "column.open": (c, o, w, v, T) => familyOpen(c, o, w, v, T.column, 0.55),
-    "column.mute": (c, o, w, v, T) => familyMute(c, o, w, v, T.column, 0.55),
-    "column.bell": (c, o, w, v, T) => striker(c, o, w, {
-      f0: 790, ratios: [1, 2.8, 5.3], peak: 0.16 * v, decay: 0.13 }),
+    "column.open": (c, o, w, v, R) => familyOpen(c, o, w, v, R.column, 0.55),
+    "column.mute": (c, o, w, v, R) => familyMute(c, o, w, v, R.column, 0.55),
+    "column.bell": (c, o, w, v, R) => strikerHit(c, o, w, v, 730),
 
-    "arch.open":   (c, o, w, v, T) => familyOpen(c, o, w, v, T.arch, 0.15),
-    "arch.mute":   (c, o, w, v, T) => familyMute(c, o, w, v, T.arch, 0.15),
-    "arch.bell":   (c, o, w, v, T) => striker(c, o, w, {
-      f0: 1010, ratios: [1, 2.86, 5.5], peak: 0.15 * v, decay: 0.1 }),
+    "arch.open":   (c, o, w, v, R) => familyOpen(c, o, w, v, R.arch, 0.15),
+    "arch.mute":   (c, o, w, v, R) => familyMute(c, o, w, v, R.arch, 0.15),
+    "arch.bell":   (c, o, w, v, R) => strikerHit(c, o, w, v, 950),
 
-    /* DRIVE — the accompaniment hand drum, the ensemble's engine. */
-    "drive.bass":  (c, o, w, v, T) => handBass(c, o, w, v, T.drive),
-    "drive.tone":  (c, o, w, v, T) => handTone(c, o, w, v, T.drive),
-    "drive.slap":  (c, o, w, v, T) => handSlap(c, o, w, v, T.drive),
-    "drive.ghost": (c, o, w, v, T) => handGhost(c, o, w, v, T.drive),
+    /* DRIVE — the accompaniment hand drum, the circle's engine. */
+    "drive.bass":  (c, o, w, v, R) => handBass(c, o, w, v, R.drive),
+    "drive.tone":  (c, o, w, v, R) => handTone(c, o, w, v, R.drive),
+    "drive.slap":  (c, o, w, v, R) => handSlap(c, o, w, v, R.drive),
+    "drive.ghost": (c, o, w, v, R) => handGhost(c, o, w, v, R.drive),
 
     /* CALLER — the lead hand drum. Smaller, so it speaks faster. */
-    "caller.bass":  (c, o, w, v, T) => handBass(c, o, w, v * 0.95, T.caller),
-    "caller.tone":  (c, o, w, v, T) => handTone(c, o, w, v, T.caller),
-    "caller.slap":  (c, o, w, v, T) => handSlap(c, o, w, v, T.caller),
-    "caller.ghost": (c, o, w, v, T) => handGhost(c, o, w, v, T.caller)
+    "caller.bass":  (c, o, w, v, R) => handBass(c, o, w, v * 0.95, R.caller),
+    "caller.tone":  (c, o, w, v, R) => handTone(c, o, w, v, R.caller),
+    "caller.slap":  (c, o, w, v, R) => handSlap(c, o, w, v, R.caller),
+    "caller.ghost": (c, o, w, v, R) => handGhost(c, o, w, v, R.caller)
   };
 
   /* ---------- public API ---------- */
 
-  V.play = function (ctx, out, strokeName, when, vel, tuning) {
+  V.play = function (ctx, out, strokeName, when, vel, register) {
     const fn = STROKES[strokeName];
     if (!fn) return;
-    const T = tuning || DEFAULT_TUNING;
+    const R = register || DEFAULT_REGISTER;
     fn(ctx, out, when, Math.max(0.02, Math.min(1, vel)),
        {
-         floor:  T.floor  || DEFAULT_TUNING.floor,
-         column: T.column || DEFAULT_TUNING.column,
-         arch:   T.arch   || DEFAULT_TUNING.arch,
-         drive:  T.drive  || DEFAULT_TUNING.drive,
-         caller: T.caller || DEFAULT_TUNING.caller
+         floor:  R.floor  || DEFAULT_REGISTER.floor,
+         column: R.column || DEFAULT_REGISTER.column,
+         arch:   R.arch   || DEFAULT_REGISTER.arch,
+         drive:  R.drive  || DEFAULT_REGISTER.drive,
+         caller: R.caller || DEFAULT_REGISTER.caller
        });
   };
 
   V.strokeNames = Object.keys(STROKES);
-  V.DEFAULT_TUNING = DEFAULT_TUNING;
+  V.DEFAULT_REGISTER = DEFAULT_REGISTER;
 
   window.LATTICE = window.LATTICE || {};
   window.LATTICE.Voices = V;
