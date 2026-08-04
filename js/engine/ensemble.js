@@ -90,6 +90,12 @@
     // motif graph, energy-matched to heat, with mutation.
     if (this.manualLead) {
       plan.spark = new Map();
+      // The human lead can still cue a call: the group answers next cycle.
+      if (this.pendingCall) {
+        this.pendingCall = false;
+        this.respondCycle = cycle + 1;
+        if (this.onCallFired) this.onCallFired();
+      }
     } else {
       const motif = this.pickMotif();
       let ev = motif.ev.slice();
